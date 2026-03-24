@@ -1,0 +1,66 @@
+// Package types provides type definitions for the iLink SDK.
+package types
+
+// BaseInfo contains common request metadata attached to every CGI request.
+type BaseInfo struct {
+	ChannelVersion string `json:"channel_version,omitempty"`
+}
+
+// MessageType constants.
+type MessageType int
+
+const (
+	MessageTypeNone MessageType = iota
+	MessageTypeUser             // User message
+	MessageTypeBot              // Bot message
+)
+
+// MessageItemType constants.
+type MessageItemType int
+
+const (
+	MessageItemTypeNone MessageItemType = iota
+	MessageItemTypeText
+	MessageItemTypeImage
+	MessageItemTypeVoice
+	MessageItemTypeFile
+	MessageItemTypeVideo
+)
+
+// MessageState constants.
+type MessageState int
+
+const (
+	MessageStateNew MessageState = iota
+	MessageStateGenerating
+	MessageStateFinish
+)
+
+// UploadMediaType constants for CDN upload.
+type UploadMediaType int
+
+const (
+	UploadMediaTypeImage UploadMediaType = iota + 1
+	UploadMediaTypeVideo
+	UploadMediaTypeFile
+	UploadMediaTypeVoice
+)
+
+// TypingStatus constants.
+type TypingStatus int
+
+const (
+	TypingStatusTyping TypingStatus = iota + 1
+	TypingStatusCancel
+)
+
+// LoginStatus represents QR code login status.
+type LoginStatus int
+
+const (
+	LoginStatusWaiting LoginStatus = iota + 1 // Waiting for scan
+	LoginStatusScanned                         // QR code scanned
+	LoginStatusConfirmed                       // Login confirmed
+	LoginStatusExpired                         // QR code expired
+	LoginStatusCanceled                        // Login canceled
+)
