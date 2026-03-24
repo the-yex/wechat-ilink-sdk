@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -235,22 +236,115 @@ func (c *Client) RemainingPause() time.Duration {
 
 // GetBotQRCode retrieves a QR code for bot login.
 func (c *Client) GetBotQRCode(ctx context.Context, req *GetBotQRCodeRequest) (*GetBotQRCodeResponse, error) {
-	req.BaseInfo = c.buildBaseInfo()
-
-	var resp GetBotQRCodeResponse
-	if err := c.doPost(ctx, "ilink/bot/get_bot_qrcode", req, &resp); err != nil {
-		return nil, err
+	// Build URL with query parameters
+	baseURL := c.config.BaseURL + "ilink/bot/get_bot_qrcode"
+	botType := req.BotType
+	if botType == "" {
+		botType = "3" // Default bot type
 	}
-	return &resp, nil
+	urlStr := fmt.Sprintf("%s?bot_type=%s", baseURL, url.QueryEscape(botType))
+
+	// Build headers
+	headers := c.buildHeaders(0)
+	routeTag := loadRouteTag()
+	if routeTag != "" {
+		headers.Set("SKRouteTag", routeTag)
+	}
+
+	// Create request
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header = headers
+
+	// Send request
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get QR code failed: status=%d, body=%s", resp.StatusCode, string(respData))
+	}
+
+	// Parse response
+	var result GetBotQRCodeResponse
+	if err := json.Unmarshal(respData, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// loadRouteTag loads the SKRouteTag header value from environment.
+// It checks ILINK_ROUTE_TAG environment variable first, then returns empty string.
+func loadRouteTag() string {
+	// Check environment variable
+	if routeTag := os.Getenv("ILINK_ROUTE_TAG"); routeTag != "" {
+		return routeTag
+	}
+	// Try legacy variable name
+	if routeTag := os.Getenv("SK_ROUTE_TAG"); routeTag != "" {
+		return routeTag
+	}
+	return ""
 }
 
 // GetQRCodeStatus checks the QR code scan status.
+// It uses long polling (35 seconds) to wait for status changes.
 func (c *Client) GetQRCodeStatus(ctx context.Context, req *GetQRCodeStatusRequest) (*GetQRCodeStatusResponse, error) {
-	req.BaseInfo = c.buildBaseInfo()
+	// Build URL with query parameters
+	baseURL := c.config.BaseURL + "ilink/bot/get_qrcode_status"
+	urlStr := fmt.Sprintf("%s?qrcode=%s", baseURL, url.QueryEscape(req.QRCode))
 
-	var resp GetQRCodeStatusResponse
-	if err := c.doPost(ctx, "ilink/bot/get_qrcode_status", req, &resp); err != nil {
-		return nil, err
+	// Build headers
+	headers := c.buildHeaders(0)
+	headers.Set("iLink-App-ClientVersion", "1")
+	routeTag := loadRouteTag()
+	if routeTag != "" {
+		headers.Set("SKRouteTag", routeTag)
 	}
-	return &resp, nil
+
+	// Create request with long-poll timeout
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header = headers
+
+	// Use long-poll client (35 second timeout)
+	client := c.httpLP
+
+	// Send request
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get status failed: status=%d, body=%s", resp.StatusCode, string(respData))
+	}
+
+	// Parse response
+	var result GetQRCodeStatusResponse
+	if err := json.Unmarshal(respData, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &result, nil
 }

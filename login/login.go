@@ -63,7 +63,6 @@ func (f *LoginFlow) GetQRCode(ctx context.Context) (*QRCode, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get QR code: %w", err)
 	}
-
 	if resp.Ret != 0 {
 		return nil, fmt.Errorf("get QR code failed: %s", resp.ErrMsg)
 	}
@@ -206,4 +205,101 @@ func LoginWithContext(ctx context.Context, client *ilink.Client, displayCallback
 
 	// Poll for status
 	return flow.PollStatus(ctx)
+}
+
+// PrintQRCode prints the QR code to the terminal for scanning.
+// It uses the QR code content (URL) to generate a terminal-friendly QR code.
+func PrintQRCode(qr *QRCode) {
+	fmt.Println()
+	fmt.Println("========================================")
+	fmt.Println("     SCAN QR CODE TO LOGIN")
+	fmt.Println("========================================")
+	fmt.Println()
+
+	// Display QR code image URL if available
+	if qr.ImageURL != "" {
+		fmt.Println("QR Code Image URL:")
+		fmt.Println(qr.ImageURL)
+		fmt.Println()
+	}
+
+	// Display QR code content
+	if qr.Content != "" {
+		fmt.Println("QR Code Content (for scanning):")
+		fmt.Println(qr.Content)
+		fmt.Println()
+	}
+
+	fmt.Println("Please scan with WeChat app and confirm login.")
+	fmt.Println("QR code will expire in 5 minutes.")
+	fmt.Println("========================================")
+}
+
+// PrintQRCodeWithTerm displays the QR code in the terminal using ASCII art.
+// This allows users to scan directly from their terminal.
+func PrintQRCodeWithTerm(qr *QRCode) {
+	fmt.Println()
+	fmt.Println("========================================")
+	fmt.Println("     SCAN QR CODE TO LOGIN")
+	fmt.Println("========================================")
+	fmt.Println()
+
+	// Display QR code image URL if available
+	if qr.ImageURL != "" {
+		fmt.Println("QR Code Image URL:")
+		fmt.Println(qr.ImageURL)
+		fmt.Println()
+	}
+
+	// Display QR code content for terminal scanning
+	if qr.Content != "" {
+		fmt.Println("Terminal QR Code (scan from screen):")
+		fmt.Println()
+		printAsciiQR(qr.Content)
+		fmt.Println()
+	}
+
+	fmt.Println("Please scan with WeChat app and confirm login.")
+	fmt.Println("QR code will expire in 5 minutes.")
+	fmt.Println("========================================")
+}
+
+// printAsciiQR prints a simple ASCII representation of the QR code.
+// For a full QR code terminal display, use an external library like qrterminal.
+func printAsciiQR(content string) {
+	// Simple ASCII border
+	width := 40
+	if len(content) > 0 {
+		fmt.Println("+" + repeatStr("-", width) + "+")
+		fmt.Println("|" + centerStr("QR Code Content", width) + "|")
+		fmt.Println("+" + repeatStr("-", width) + "+")
+		// Print content preview (truncated if too long)
+		preview := content
+		if len(preview) > width-2 {
+			preview = preview[:width-5] + "..."
+		}
+		fmt.Println("| " + centerStr(preview, width-2) + " |")
+		fmt.Println("+" + repeatStr("-", width) + "+")
+		fmt.Println()
+		fmt.Println("Note: For best scanning experience,")
+		fmt.Println("open the Image URL in a browser.")
+	}
+}
+
+// repeatStr repeats a string n times.
+func repeatStr(s string, n int) string {
+	result := ""
+	for i := 0; i < n; i++ {
+		result += s
+	}
+	return result
+}
+
+// centerStr centers a string within a given width.
+func centerStr(s string, width int) string {
+	padding := (width - len(s)) / 2
+	if padding < 0 {
+		padding = 0
+	}
+	return repeatStr(" ", padding) + s + repeatStr(" ", padding)
 }

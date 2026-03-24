@@ -81,8 +81,8 @@ type GetConfigResponse struct {
 
 // GetBotQRCodeRequest represents a get_bot_qrcode API request.
 type GetBotQRCodeRequest struct {
-	AccountID string  `json:"account_id,omitempty"`
-	BaseInfo  BaseInfo `json:"base_info"`
+	BotType  string   `json:"bot_type,omitempty"`
+	BaseInfo BaseInfo `json:"base_info"`
 }
 
 // GetBotQRCodeResponse represents a get_bot_qrcode API response.
