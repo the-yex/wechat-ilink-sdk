@@ -28,6 +28,7 @@ func main() {
 
 	// Create client with token store
 	// SDK will automatically load stored token if available
+	// SDK also handles login and re-login automatically (default behavior)
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
@@ -43,7 +44,8 @@ func main() {
 	}
 	defer client.Close()
 
-	// Login (SDK will skip QR code if valid token is stored)
+	// Explicit login (optional - Run() will auto-login if needed)
+	// Here we call Login() to show the login result before Run()
 	result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
 		login.PrintQRCodeWithTerm(qr)
 		return nil

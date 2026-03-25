@@ -15,6 +15,8 @@ type (
 	UploadMediaType         = types.UploadMediaType
 	TypingStatus            = types.TypingStatus
 	LoginStatus             = types.LoginStatus
+	EncryptType             = types.EncryptType
+	VoiceEncodeType         = types.VoiceEncodeType
 	Message                 = types.Message
 	MessageItem             = types.MessageItem
 	TextItem                = types.TextItem
@@ -71,6 +73,20 @@ const (
 	LoginStatusConfirmed = types.LoginStatusConfirmed
 	LoginStatusExpired  = types.LoginStatusExpired
 	LoginStatusCanceled = types.LoginStatusCanceled
+
+	// EncryptType constants for CDN media
+	EncryptTypeFileIDOnly = types.EncryptTypeFileIDOnly
+	EncryptTypePackMedia  = types.EncryptTypePackMedia
+
+	// VoiceEncodeType constants for voice encoding
+	VoiceEncodePCM      = types.VoiceEncodePCM
+	VoiceEncodeADPCM    = types.VoiceEncodeADPCM
+	VoiceEncodeFeature  = types.VoiceEncodeFeature
+	VoiceEncodeSpeex    = types.VoiceEncodeSpeex
+	VoiceEncodeAMR      = types.VoiceEncodeAMR
+	VoiceEncodeSILK     = types.VoiceEncodeSILK
+	VoiceEncodeMP3      = types.VoiceEncodeMP3
+	VoiceEncodeOGGSpeex = types.VoiceEncodeOGGSpeex
 )
 
 // Constructor functions wrap types package functions for backward compatibility.
@@ -93,4 +109,9 @@ func NewVideoMessage(toUserID, contextToken string, videoItem *VideoItem) *Messa
 // NewFileMessage creates a new file message for sending.
 func NewFileMessage(toUserID, contextToken string, fileItem *FileItem) *Message {
 	return types.NewFileMessage(toUserID, contextToken, fileItem)
+}
+
+// NewVoiceMessage creates a new voice message for sending.
+func NewVoiceMessage(toUserID, contextToken string, voiceItem *VoiceItem) *Message {
+	return types.NewVoiceMessage(toUserID, contextToken, voiceItem)
 }

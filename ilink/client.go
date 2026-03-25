@@ -216,6 +216,7 @@ func (c *Client) GetConfig(ctx context.Context, req *GetConfigRequest) (*GetConf
 
 // SendTyping sends a typing indicator.
 func (c *Client) SendTyping(ctx context.Context, req *SendTypingRequest) error {
+	req.BaseInfo = c.buildBaseInfo()
 	return c.doPost(ctx, "ilink/bot/sendtyping", req, nil)
 }
 

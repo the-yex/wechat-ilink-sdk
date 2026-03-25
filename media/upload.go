@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -63,6 +64,14 @@ type UploadResult struct {
 	AESKey                      []byte // AES key used for encryption
 	FileSize                    int    // Plaintext file size
 	FileSizeCiphertext          int    // Ciphertext file size
+}
+
+// AESKeyBase64 returns the AES key as base64 encoded hex string.
+// This is the format expected by WeChat API for CDNMedia.aes_key.
+func (r *UploadResult) AESKeyBase64() string {
+	// First convert to hex string, then base64 encode
+	// This matches the TS implementation: Buffer.from(aeskey.toString("hex")).toString("base64")
+	return base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(r.AESKey)))
 }
 
 // Upload uploads a media file to CDN with AES encryption.

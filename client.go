@@ -147,6 +147,22 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 	}
 
+	// Set default OnLogin callback if not provided - display QR code in terminal
+	if cfg.OnLogin == nil {
+		cfg.OnLogin = func(ctx context.Context, qr *login.QRCode) error {
+			login.PrintQRCodeWithTerm(qr)
+			return nil
+		}
+	}
+
+	// Set default OnSessionExpired callback if not provided - auto re-login
+	if cfg.OnSessionExpired == nil {
+		cfg.OnSessionExpired = func(ctx context.Context) (*ilink.LoginResult, error) {
+			cfg.Logger.Info("session expired, please re-scan QR code to login")
+			return client.Login(ctx, cfg.OnLogin)
+		}
+	}
+
 	return client, nil
 }
 
@@ -211,7 +227,6 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 	}
 	c.running = true
 	c.mu.Unlock()
-
 	defer func() {
 		c.mu.Lock()
 		c.running = false
@@ -220,9 +235,6 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 	// Auto-login if not already logged in
 	if !c.IsLoggedIn() {
-		if c.config.OnLogin == nil {
-			return fmt.Errorf("not logged in and no OnLogin callback configured; call Login() first or use WithOnLogin option")
-		}
 		c.config.Logger.Info("auto-login: not logged in, triggering login flow")
 		if _, err := c.Login(ctx, c.config.OnLogin); err != nil {
 			return fmt.Errorf("auto-login failed: %w", err)
@@ -379,6 +391,22 @@ func (c *Client) SendText(ctx context.Context, toUserID, text string) error {
 // SendImage sends an image message.
 func (c *Client) SendImage(ctx context.Context, toUserID string, imageData []byte) error {
 	return c.messages.SendImage(ctx, toUserID, imageData)
+}
+
+// SendVideo sends a video message.
+func (c *Client) SendVideo(ctx context.Context, toUserID string, videoData []byte) error {
+	return c.messages.SendVideo(ctx, toUserID, videoData)
+}
+
+// SendVoice sends a voice message.
+// voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
+func (c *Client) SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error {
+	return c.messages.SendVoice(ctx, toUserID, voiceData, voiceItem)
+}
+
+// SendFile sends a file message.
+func (c *Client) SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error {
+	return c.messages.SendFile(ctx, toUserID, fileName, fileData)
 }
 
 // SendTyping sends a typing indicator.

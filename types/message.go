@@ -135,3 +135,20 @@ func NewFileMessage(toUserID, contextToken string, fileItem *FileItem) *Message 
 		},
 	}
 }
+
+// NewVoiceMessage creates a new voice message for sending.
+func NewVoiceMessage(toUserID, contextToken string, voiceItem *VoiceItem) *Message {
+	return &Message{
+		ToUserID:     toUserID,
+		ClientID:     generateClientID(),
+		MessageType:  MessageTypeBot,
+		MessageState: MessageStateFinish,
+		ContextToken: contextToken,
+		ItemList: []*MessageItem{
+			{
+				Type:      MessageItemTypeVoice,
+				VoiceItem: voiceItem,
+			},
+		},
+	}
+}

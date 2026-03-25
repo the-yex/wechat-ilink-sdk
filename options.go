@@ -87,13 +87,18 @@ func WithTokenStore(store login.TokenStore) Option {
 
 // WithOnSessionExpired sets the callback for session expiration.
 // When the session expires, this callback is invoked to allow re-login.
+//
+// Default behavior: If not set, SDK automatically prompts for QR code re-scan.
+// Only use this option if you want custom behavior (e.g., notify external system).
+//
 // Example:
 //
 //	client, _ := ilinksdk.NewClient(
 //	    ilinksdk.WithTokenStore(tokenStore),
 //	    ilinksdk.WithOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
-//	        fmt.Println("Session expired, please scan QR code to re-login")
-//	        return client.Login(ctx, displayQRCode)
+//	        // Custom handling, e.g., notify monitoring system
+//	        notifyMonitoring("session expired")
+//	        return nil, nil // Stop the loop
 //	    }),
 //	)
 func WithOnSessionExpired(callback SessionExpiredCallback) Option {
@@ -104,12 +109,17 @@ func WithOnSessionExpired(callback SessionExpiredCallback) Option {
 
 // WithOnLogin sets the callback for QR code login.
 // When Run() is called without prior Login(), this callback is used to display QR code.
+//
+// Default behavior: If not set, SDK automatically displays QR code in terminal.
+// Only use this option if you want custom display (e.g., send to web frontend).
+//
 // Example:
 //
 //	client, _ := ilinksdk.NewClient(
 //	    ilinksdk.WithTokenStore(tokenStore),
 //	    ilinksdk.WithOnLogin(func(ctx context.Context, qr *login.QRCode) error {
-//	        login.PrintQRCodeWithTerm(qr)
+//	        // Custom display, e.g., send to web UI
+//	        websocket.Send(qr.ImageURL)
 //	        return nil
 //	    }),
 //	)

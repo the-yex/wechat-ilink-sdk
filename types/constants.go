@@ -65,3 +65,27 @@ const (
 	LoginStatusExpired  LoginStatus = "expired"   // QR code expired
 	LoginStatusCanceled LoginStatus = "canceled"  // Login canceled (not used by API)
 )
+
+// EncryptType constants for CDN media encryption.
+// Used in CDNMedia.encrypt_type field.
+type EncryptType int
+
+const (
+	EncryptTypeFileIDOnly EncryptType = 0 // Only encrypt file ID
+	EncryptTypePackMedia  EncryptType = 1 // Pack thumbnail/mid-size media info
+)
+
+// VoiceEncodeType constants for voice encoding format.
+// Used in VoiceItem.encode_type field.
+type VoiceEncodeType int
+
+const (
+	VoiceEncodePCM       VoiceEncodeType = 1 // PCM format
+	VoiceEncodeADPCM     VoiceEncodeType = 2 // ADPCM format
+	VoiceEncodeFeature   VoiceEncodeType = 3 // Feature format
+	VoiceEncodeSpeex     VoiceEncodeType = 4 // Speex format
+	VoiceEncodeAMR       VoiceEncodeType = 5 // AMR format
+	VoiceEncodeSILK      VoiceEncodeType = 6 // SILK format (commonly used by WeChat)
+	VoiceEncodeMP3       VoiceEncodeType = 7 // MP3 format
+	VoiceEncodeOGGSpeex  VoiceEncodeType = 8 // OGG-Speex format
+)

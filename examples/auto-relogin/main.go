@@ -14,7 +14,7 @@ import (
 )
 
 // This example demonstrates automatic re-login when session expires.
-// The Run() method handles everything: login, message processing, and re-login on expiry.
+// The SDK handles everything automatically: login, message processing, and re-login on expiry.
 func main() {
 	// Setup logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -26,29 +26,18 @@ func main() {
 	// Create token store for persistence
 	tokenStore, _ := login.NewFileTokenStore("")
 
-	// Create client with all callbacks configured
+	// Create client - SDK handles login and re-login automatically by default
 	client, _ := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
-		// Called when QR code login is needed
-		ilinksdk.WithOnLogin(func(ctx context.Context, qr *login.QRCode) error {
-			login.PrintQRCodeWithTerm(qr)
-			return nil
-		}),
-		// Called when session expires - trigger re-login
-		ilinksdk.WithOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
-			fmt.Println("\n========================================")
-			fmt.Println("  Session expired! Please re-scan QR code")
-			fmt.Println("========================================")
-			// Return nil to trigger QR code login via OnLogin callback
-			// Or return client.Login() with a specific callback
-			return nil, nil // This will stop the loop; user can restart
-		}),
+		// That's it! SDK will:
+		// 1. Show QR code in terminal when login needed (default OnLogin)
+		// 2. Auto re-login when session expires (default OnSessionExpired)
 	)
 	defer client.Close()
 
 	fmt.Println("Starting bot...")
-	fmt.Println("When session expires, you will be prompted to re-scan QR code.")
+	fmt.Println("SDK will automatically handle login and re-login on session expiry.")
 	fmt.Println("Press Ctrl+C to stop.")
 
 	// Setup signal handling
@@ -64,10 +53,7 @@ func main() {
 		cancel()
 	}()
 
-	// Run handles everything:
-	// 1. Auto-login if not logged in (using OnLogin callback)
-	// 2. Process messages
-	// 3. Re-login on session expiry (using OnSessionExpired callback)
+	// Run handles everything automatically
 	if err := client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
 		logger.Info("received message", "from", msg.FromUserID)
 		if text := msg.GetText(); text != "" {

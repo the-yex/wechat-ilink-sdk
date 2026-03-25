@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
@@ -217,6 +216,7 @@ func joinStrings(strs []string) string {
 // AutoReplyPlugin 关键词自动回复插件
 type AutoReplyPlugin struct {
 	replies map[string]string
+	sdk     plugin.SDK
 }
 
 // NewAutoReplyPlugin 创建自动回复插件
@@ -233,6 +233,7 @@ func (p *AutoReplyPlugin) Name() string {
 
 // Initialize 初始化并注册关键词回复
 func (p *AutoReplyPlugin) Initialize(ctx context.Context, sdk plugin.SDK) error {
+	p.sdk = sdk
 	// 注册关键词回复
 	p.AddReply("你好", "你好！有什么可以帮助你的吗？")
 	p.AddReply("hello", "Hello! How can I help you?")
@@ -259,7 +260,7 @@ func (p *AutoReplyPlugin) OnMessage(ctx context.Context, msg *ilink.Message) err
 	// 检查是否有关键词匹配
 	for keyword, reply := range p.replies {
 		if contains(text, keyword) {
-			return sendText(ctx, p, msg.FromUserID, reply)
+			return p.sdk.SendText(ctx, msg.FromUserID, reply)
 		}
 	}
 
@@ -299,13 +300,6 @@ func toLower(s string) string {
 	return string(result)
 }
 
-// sendText 辅助函数，用于发送消息
-func sendText(ctx context.Context, p *AutoReplyPlugin, toUserID, text string) error {
-	// 这里需要通过 SDK 发送，但为了简化示例，直接打印
-	fmt.Printf("[自动回复] %s: %s\n", toUserID, text)
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Main - 演示插件使用
 // ---------------------------------------------------------------------------
@@ -330,7 +324,7 @@ func main() {
 	commandPlugin := NewCommandPlugin()
 	autoReplyPlugin := NewAutoReplyPlugin()
 
-	// 创建客户端并注册插件
+	// 创建客户端并注册插件（SDK 自动处理登录和重登录）
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
@@ -341,29 +335,7 @@ func main() {
 	}
 	defer client.Close()
 
-	// 检查是否有存储的 Token
-	accounts, err := client.ListAccounts()
-	if err == nil && len(accounts) > 0 {
-		fmt.Printf("找到已存储的账户：%s\n", accounts[0])
-		client.LoadToken(accounts[0])
-	} else {
-		// 扫码登录
-		fmt.Println("未找到存储的 Token，开始扫码登录...")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		result, err := client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
-			login.PrintQRCodeWithTerm(qr)
-			return nil
-		})
-		if err != nil {
-			fmt.Printf("登录失败：%v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("登录成功！账户：%s\n", result.AccountID)
-	}
-
-	// 注册插件到客户端
+	// 注册插件到客户端（在 Run() 之前）
 	if err := client.UsePlugin(context.Background(), loggerPlugin); err != nil {
 		logger.Error("注册日志插件失败", "error", err)
 	}

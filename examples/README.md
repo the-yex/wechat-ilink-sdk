@@ -11,6 +11,7 @@
 | [qrcode-login-with-image](./qrcode-login-with-image) | 进阶 | 完整机器人 + 终端二维码 |
 | [auto-relogin](./auto-relogin) | 进阶 | 会话过期自动重登录 |
 | [basic-bot](./basic-bot) | 进阶 | Echo 机器人 + 中间件 |
+| [sqlite-storage](./sqlite-storage) | 进阶 | SQLite 存储 Token |
 | [plugins](./plugins) | 高级 | 插件开发示例 |
 | [ai-assistant](./ai-assistant) | 高级 | AI 助手集成模式 |
 
@@ -83,7 +84,20 @@ go run ./examples/basic-bot/main.go
 - 订阅事件
 - Echo 消息回复
 
-### 6. plugins - 插件开发
+### 6. sqlite-storage - SQLite 存储
+
+**适合：** 学习自定义 TokenStore 实现
+
+```bash
+go run ./examples/sqlite-storage/main.go
+```
+
+**功能：**
+- 实现 TokenStore 接口
+- SQLite 数据库持久化
+- 完整的消息处理示例
+
+### 7. plugins - 插件开发
 
 **适合：** 学习插件系统开发
 
@@ -98,7 +112,7 @@ go run ./examples/plugins/main.go
 
 详细文档：[plugins/README.md](./plugins/README.md)
 
-### 7. ai-assistant - AI 助手
+### 8. ai-assistant - AI 助手
 
 **适合：** 集成 AI 服务
 
@@ -113,10 +127,17 @@ go run ./examples/ai-assistant/main.go
 
 ## 登录流程说明
 
+SDK 自动处理登录流程，开箱即用：
+
 ```
 ┌─────────────────┐
 │   创建客户端     │
 │  (带 TokenStore) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   调用 Run()    │
 └────────┬────────┘
          │
          ▼
@@ -126,8 +147,8 @@ go run ./examples/ai-assistant/main.go
          │ 无 Token                    │
          ▼                             ▼
 ┌─────────────────┐           ┌─────────────────┐
-│  生成二维码      │           │  验证 Token      │
-│  (QRCode)       │           │  (getConfig API) │
+│  自动显示二维码  │           │  验证 Token      │
+│  (终端打印)     │           │  (getConfig API) │
 └────────┬────────┘           └────────┬────────┘
          │                             │
          ▼                             ▼
@@ -137,22 +158,22 @@ go run ./examples/ai-assistant/main.go
          │                      是 │        │ 否
          ▼                         ▼        ▼
 ┌─────────────────┐           ┌─────────┐ ┌─────────┐
-│  获取登录结果    │           │ 跳过扫码 │ │清除Token│
-│  (Token, ID)    │           │ 直接运行 │ │ 重新登录│
+│  自动保存 Token  │           │ 跳过扫码 │ │重新扫码 │
+│  到 TokenStore   │           │ 直接运行 │ │  登录   │
 └────────┬────────┘           └─────────┘ └─────────┘
          │
          ▼
 ┌─────────────────┐
-│  保存 Token      │
-│  到 TokenStore   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
 │  开始消息监听    │
-│  (Run)          │
+│  (长轮询)       │
 └─────────────────┘
 ```
+
+**默认行为**：
+- **OnLogin**: 自动在终端显示二维码
+- **OnSessionExpired**: 会话过期时自动提示重新扫码
+
+**自定义行为**：使用 `WithOnLogin` 和 `WithOnSessionExpired` 选项覆盖默认行为。
 
 ## Token 存储
 
@@ -248,27 +269,15 @@ client.SendImage(ctx, msg.FromUserID, imageData)
 client.SendFile(ctx, msg.FromUserID, fileName, fileData)
 ```
 
-## 会话过期处理
-
-微信会话有有效期限制，SDK 提供自动处理机制：
-
-```go
-// 设置回调
-client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
-    fmt.Println("会话已过期，请重新扫码")
-    return client.Login(ctx, qrCallback)
-})
-```
-
 ## 常见问题
 
 ### Q: 二维码过期怎么办？
 
-A: 二维码有效期 5 分钟。过期后 SDK 会返回错误，重新调用 `Login()` 即可。
+A: 二维码有效期 5 分钟。过期后 SDK 会自动重新获取并显示新的二维码。
 
 ### Q: Token 多久过期？
 
-A: Token 有效期由微信服务器控制，通常为数小时到数天。过期时 SDK 会触发 `OnSessionExpired` 回调。
+A: Token 有效期由微信服务器控制。过期时 SDK 会自动提示重新扫码登录，无需手动处理。
 
 ### Q: 如何多账号登录？
 

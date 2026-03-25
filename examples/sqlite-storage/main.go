@@ -10,12 +10,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	_ "github.com/mattn/go-sqlite3"
 	ilinksdk "github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/event"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
 	"github.com/the-yex/wechat-ilink-sdk/login"
-
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/the-yex/wechat-ilink-sdk/media"
+	"github.com/the-yex/wechat-ilink-sdk/types"
 )
 
 // SQLiteTokenStore implements login.TokenStore using SQLite.
@@ -127,15 +128,10 @@ func main() {
 	fmt.Println("SQLite 存储已初始化: ./wechat-bot.db")
 
 	// Create client - just pass the token store, SDK handles everything else
+	// (login, re-login on session expiry)
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(slog.Default()),
 		ilinksdk.WithTokenStore(store),
-
-		// QR code display callback
-		ilinksdk.WithOnLogin(func(ctx context.Context, qr *login.QRCode) error {
-			fmt.Print(qr.TerminalString())
-			return nil
-		}),
 	)
 	if err != nil {
 		log.Fatalf("创建客户端失败: %v", err)
@@ -144,13 +140,91 @@ func main() {
 	// Setup event handlers
 	client.OnMessage(func(ctx context.Context, e *event.Event) error {
 		msg := e.Data.(*ilink.Message)
-		text := msg.GetText()
-		fmt.Printf("收到消息: from=%s, content=%s\n", msg.FromUserID, text)
 
-		// Auto-reply
-		if text != "" {
+		// Only handle user messages
+		if !msg.IsFromUser() {
+			return nil
+		}
+
+		// Handle text message
+		if text := msg.GetText(); text != "" {
+			fmt.Printf("收到文本消息: from=%s, content=%s\n", msg.FromUserID, text)
 			return client.SendText(ctx, msg.FromUserID, "收到: "+text)
 		}
+
+		// Handle media message
+		if item := msg.GetFirstMediaItem(); item != nil {
+			switch item.Type {
+			case types.MessageItemTypeImage:
+				fmt.Printf("收到图片消息: from=%s\n", msg.FromUserID)
+				// Download image and send back
+				if item.ImageItem != nil && item.ImageItem.Media != nil {
+					imageData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
+						EncryptQueryParam: item.ImageItem.Media.EncryptQueryParam,
+						AESKey:            item.ImageItem.Media.AESKey,
+					})
+					if err != nil {
+						fmt.Printf("下载图片失败: %v\n", err)
+						return err
+					}
+					fmt.Printf("图片下载成功，大小: %d bytes\n", len(imageData))
+					return client.SendImage(ctx, msg.FromUserID, imageData)
+				}
+				return client.SendText(ctx, msg.FromUserID, "收到图片(无法下载)")
+
+			case types.MessageItemTypeVoice:
+				fmt.Printf("收到语音消息: from=%s\n", msg.FromUserID)
+				// Voice sending is not supported yet
+				// Only acknowledge receipt
+				if item.VoiceItem != nil {
+					text := item.VoiceItem.Text
+					if text != "" {
+						return client.SendText(ctx, msg.FromUserID, "收到语音: "+text)
+					}
+					return client.SendText(ctx, msg.FromUserID, "收到语音消息")
+				}
+				return nil
+
+			case types.MessageItemTypeVideo:
+				fmt.Printf("收到视频消息: from=%s\n", msg.FromUserID)
+				// Download video and send back
+				if item.VideoItem != nil && item.VideoItem.Media != nil {
+					videoData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
+						EncryptQueryParam: item.VideoItem.Media.EncryptQueryParam,
+						AESKey:            item.VideoItem.Media.AESKey,
+					})
+					if err != nil {
+						fmt.Printf("下载视频失败: %v\n", err)
+						return err
+					}
+					fmt.Printf("视频下载成功，大小: %d bytes\n", len(videoData))
+					return client.SendVideo(ctx, msg.FromUserID, videoData)
+				}
+				return client.SendText(ctx, msg.FromUserID, "收到视频(无法下载)")
+
+			case types.MessageItemTypeFile:
+				fmt.Printf("收到文件消息: from=%s\n", msg.FromUserID)
+				// Download file and send back
+				if item.FileItem != nil && item.FileItem.Media != nil {
+					fileData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
+						EncryptQueryParam: item.FileItem.Media.EncryptQueryParam,
+						AESKey:            item.FileItem.Media.AESKey,
+					})
+					if err != nil {
+						fmt.Printf("下载文件失败: %v\n", err)
+						return err
+					}
+					fileName := item.FileItem.FileName
+					if fileName == "" {
+						fileName = "file"
+					}
+					fmt.Printf("文件下载成功，大小: %d bytes\n", len(fileData))
+					return client.SendFile(ctx, msg.FromUserID, fileName, fileData)
+				}
+				return client.SendText(ctx, msg.FromUserID, "收到文件(无法下载)")
+			}
+		}
+
 		return nil
 	})
 

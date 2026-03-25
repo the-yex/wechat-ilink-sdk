@@ -84,8 +84,111 @@ func (s *messageService) SendImage(ctx context.Context, toUserID string, imageDa
 		Message: ilink.NewImageMessage(toUserID, contextToken, &ilink.ImageItem{
 			Media: &ilink.CDNMedia{
 				EncryptQueryParam: result.DownloadEncryptedQueryParam,
-				AESKey:            fmt.Sprintf("%x", result.AESKey),
+				AESKey:            result.AESKeyBase64(),
+				EncryptType:       int(ilink.EncryptTypePackMedia),
 			},
+			MidSize: result.FileSizeCiphertext,
+		}),
+	})
+}
+
+// SendVideo sends a video message to a user.
+func (s *messageService) SendVideo(ctx context.Context, toUserID string, videoData []byte) error {
+	contextToken := s.contextTokens.Get("", toUserID)
+	if contextToken == "" {
+		return ErrContextTokenRequired
+	}
+
+	// Upload video to CDN
+	result, err := s.cdnClient.Upload(ctx, &media.UploadRequest{
+		Data:      videoData,
+		MediaType: ilink.UploadMediaTypeVideo,
+		ToUserID:  toUserID,
+	})
+	if err != nil {
+		return fmt.Errorf("upload video: %w", err)
+	}
+
+	// Send video message
+	return s.SendMessage(ctx, &ilink.SendMessageRequest{
+		Message: ilink.NewVideoMessage(toUserID, contextToken, &ilink.VideoItem{
+			Media: &ilink.CDNMedia{
+				EncryptQueryParam: result.DownloadEncryptedQueryParam,
+				AESKey:            result.AESKeyBase64(),
+				EncryptType:       int(ilink.EncryptTypePackMedia),
+			},
+			VideoSize: result.FileSizeCiphertext,
+		}),
+	})
+}
+
+// SendVoice sends a voice message to a user.
+// voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
+func (s *messageService) SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error {
+	contextToken := s.contextTokens.Get("", toUserID)
+	if contextToken == "" {
+		return ErrContextTokenRequired
+	}
+
+	// Upload voice to CDN
+	result, err := s.cdnClient.Upload(ctx, &media.UploadRequest{
+		Data:      voiceData,
+		MediaType: ilink.UploadMediaTypeVoice,
+		ToUserID:  toUserID,
+	})
+	if err != nil {
+		return fmt.Errorf("upload voice: %w", err)
+	}
+
+	// Build voice message with original encoding parameters
+	item := &ilink.VoiceItem{
+		Media: &ilink.CDNMedia{
+			EncryptQueryParam: result.DownloadEncryptedQueryParam,
+			AESKey:            result.AESKeyBase64(),
+			EncryptType:       int(ilink.EncryptTypePackMedia),
+		},
+	}
+
+	// Copy encoding parameters from original voice item
+	if voiceItem != nil {
+		item.Playtime = voiceItem.Playtime
+		item.EncodeType = voiceItem.EncodeType
+		item.BitsPerSample = voiceItem.BitsPerSample
+		item.SampleRate = voiceItem.SampleRate
+	}
+
+	return s.SendMessage(ctx, &ilink.SendMessageRequest{
+		Message: ilink.NewVoiceMessage(toUserID, contextToken, item),
+	})
+}
+
+// SendFile sends a file message to a user.
+func (s *messageService) SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error {
+	contextToken := s.contextTokens.Get("", toUserID)
+	if contextToken == "" {
+		return ErrContextTokenRequired
+	}
+
+	// Upload file to CDN
+	result, err := s.cdnClient.Upload(ctx, &media.UploadRequest{
+		Data:      fileData,
+		MediaType: ilink.UploadMediaTypeFile,
+		ToUserID:  toUserID,
+	})
+	if err != nil {
+		return fmt.Errorf("upload file: %w", err)
+	}
+
+	// Send file message
+	return s.SendMessage(ctx, &ilink.SendMessageRequest{
+		Message: ilink.NewFileMessage(toUserID, contextToken, &ilink.FileItem{
+			FileName: fileName,
+			Media: &ilink.CDNMedia{
+				EncryptQueryParam: result.DownloadEncryptedQueryParam,
+				AESKey:            result.AESKeyBase64(),
+				EncryptType:       int(ilink.EncryptTypePackMedia),
+			},
+			Len: fmt.Sprintf("%d", result.FileSize),
 		}),
 	})
 }

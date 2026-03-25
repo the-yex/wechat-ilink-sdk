@@ -41,6 +41,19 @@ type MessageService interface {
 	// The image data is automatically uploaded to CDN.
 	SendImage(ctx context.Context, toUserID string, imageData []byte) error
 
+	// SendVideo sends a video message to a user.
+	// The video data is automatically uploaded to CDN.
+	SendVideo(ctx context.Context, toUserID string, videoData []byte) error
+
+	// SendVoice sends a voice message to a user.
+	// The voice data is automatically uploaded to CDN.
+	// voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
+	SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error
+
+	// SendFile sends a file message to a user.
+	// The file data is automatically uploaded to CDN.
+	SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error
+
 	// SendTyping sends a typing indicator to a user.
 	SendTyping(ctx context.Context, toUserID string, typing bool) error
 }

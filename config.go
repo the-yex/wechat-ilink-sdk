@@ -50,11 +50,13 @@ type Config struct {
 	TokenStore login.TokenStore
 
 	// Login callback - called when QR code login is needed
-	// Required for Run() to work without prior Login() call
+	// Default: displays QR code in terminal using login.PrintQRCodeWithTerm
+	// Set this only if you want custom QR code display (e.g., web UI)
 	OnLogin login.QRCodeCallback
 
-	// Callback when session expires (optional)
-	// If set, this will be called when the session expires to allow re-login.
+	// Callback when session expires
+	// Default: automatically prompts for QR code re-scan via login.PrintQRCodeWithTerm
+	// Set this only if you want custom handling (e.g., stop the loop, notify monitoring)
 	// Return nil to stop the Run loop, or a LoginResult to continue.
 	OnSessionExpired SessionExpiredCallback
 

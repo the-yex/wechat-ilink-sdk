@@ -55,9 +55,10 @@ type GetUploadURLResponse struct {
 
 // SendTypingRequest represents a sendTyping API request.
 type SendTypingRequest struct {
-	ILinkUserID  string `json:"ilink_user_id,omitempty"`
-	TypingTicket string `json:"typing_ticket,omitempty"`
-	Status       int    `json:"status,omitempty"` // 1=typing, 2=cancel
+	ILinkUserID  string   `json:"ilink_user_id,omitempty"`
+	TypingTicket string   `json:"typing_ticket,omitempty"`
+	Status       int      `json:"status,omitempty"` // 1=typing, 2=cancel
+	BaseInfo     BaseInfo `json:"base_info"`
 }
 
 // SendTypingResponse represents a sendTyping API response.
