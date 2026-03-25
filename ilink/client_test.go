@@ -100,7 +100,9 @@ func TestClient_SendMessage(t *testing.T) {
 			assert.Equal(t, "Hello", req.Message.ItemList[0].TextItem.Text)
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ret": 0})
 	}))
 	defer server.Close()
 
@@ -171,7 +173,9 @@ func TestClient_GetConfig(t *testing.T) {
 func TestClient_SendTyping(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/ilink/bot/sendtyping", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ret": 0})
 	}))
 	defer server.Close()
 
@@ -195,9 +199,8 @@ func TestClient_GetBotQRCode(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(GetBotQRCodeResponse{
-			QRCode:    "qrcode_url_123",
-			ImageURL:  "https://example.com/qr.png",
-			ExpiresIn: 300,
+			QRCode:   "qrcode_url_123",
+			ImageURL: "https://example.com/qr.png",
 		})
 	}))
 	defer server.Close()
@@ -211,7 +214,6 @@ func TestClient_GetBotQRCode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "qrcode_url_123", resp.QRCode)
 	assert.Equal(t, "https://example.com/qr.png", resp.ImageURL)
-	assert.Equal(t, 300, resp.ExpiresIn)
 }
 
 func TestClient_GetQRCodeStatus(t *testing.T) {

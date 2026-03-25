@@ -10,16 +10,18 @@ import (
 
 // Registry manages registered plugins.
 type Registry struct {
-	mu      sync.RWMutex
-	plugins map[string]Plugin
-	sdk     SDK
+	mu          sync.RWMutex
+	plugins     map[string]Plugin
+	pluginOrder []string // Keep insertion order for deterministic iteration
+	sdk         SDK
 }
 
 // NewRegistry creates a new plugin registry.
 func NewRegistry(sdk SDK) *Registry {
 	return &Registry{
-		plugins: make(map[string]Plugin),
-		sdk:     sdk,
+		plugins:     make(map[string]Plugin),
+		pluginOrder: make([]string, 0),
+		sdk:         sdk,
 	}
 }
 
@@ -34,6 +36,7 @@ func (r *Registry) Register(p Plugin) error {
 	}
 
 	r.plugins[name] = p
+	r.pluginOrder = append(r.pluginOrder, name)
 	return nil
 }
 
@@ -42,20 +45,22 @@ func (r *Registry) Initialize(ctx context.Context) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, p := range r.plugins {
+	for _, name := range r.pluginOrder {
+		p := r.plugins[name]
 		if err := p.Initialize(ctx, r.sdk); err != nil {
-			return fmt.Errorf("initialize plugin %s: %w", p.Name(), err)
+			return fmt.Errorf("initialize plugin %s: %w", name, err)
 		}
 	}
 	return nil
 }
 
-// OnMessage calls OnMessage on all plugins.
+// OnMessage calls OnMessage on all plugins in registration order.
 func (r *Registry) OnMessage(ctx context.Context, msg *ilink.Message) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, p := range r.plugins {
+	for _, name := range r.pluginOrder {
+		p := r.plugins[name]
 		if err := p.OnMessage(ctx, msg); err != nil {
 			return err
 		}
@@ -68,7 +73,8 @@ func (r *Registry) OnError(ctx context.Context, err error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, p := range r.plugins {
+	for _, name := range r.pluginOrder {
+		p := r.plugins[name]
 		p.OnError(ctx, err)
 	}
 }

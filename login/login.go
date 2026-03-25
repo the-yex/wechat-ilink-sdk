@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/skip2/go-qrcode"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
 )
 
@@ -32,12 +33,12 @@ func DefaultLoginConfig() LoginConfig {
 type QRCode struct {
 	Content   string    // QR code content (URL)
 	ImageURL  string    // QR code image URL
-	ExpiresAt time.Time // Expiration time
+	StartedAt time.Time // When the QR code was created (for TTL tracking)
 }
 
-// IsExpired returns true if the QR code has expired.
+// IsExpired checks if the QR code has exceeded its TTL (5 minutes).
 func (q *QRCode) IsExpired() bool {
-	return time.Now().After(q.ExpiresAt)
+	return time.Since(q.StartedAt) > 5*time.Minute
 }
 
 // LoginFlow manages the QR code login process.
@@ -64,17 +65,12 @@ func (f *LoginFlow) GetQRCode(ctx context.Context) (*QRCode, error) {
 		return nil, fmt.Errorf("get QR code: %w", err)
 	}
 	if resp.Ret != 0 {
-		return nil, fmt.Errorf("get QR code failed: %s", resp.ErrMsg)
+		return nil, fmt.Errorf("get QR code failed: %d", resp.Ret)
 	}
-
 	qr := &QRCode{
-		Content:  resp.QRCode,
-		ImageURL: resp.ImageURL,
-	}
-	if resp.ExpiresIn > 0 {
-		qr.ExpiresAt = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
-	} else {
-		qr.ExpiresAt = time.Now().Add(f.config.QRCodeExpiry)
+		Content:   resp.QRCode,
+		ImageURL:  resp.ImageURL,
+		StartedAt: time.Now(), // Track when QR code was created
 	}
 
 	f.qrCode = qr
@@ -119,7 +115,7 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 
 	switch resp.Status {
 	case ilink.LoginStatusWaiting:
-		// Still waiting, check if expired
+		// Still waiting for scan - check if client-side TTL exceeded
 		if f.qrCode.IsExpired() {
 			if f.refreshCount >= f.config.MaxRefreshCount {
 				return nil, fmt.Errorf("QR code expired after %d refreshes", f.refreshCount)
@@ -135,6 +131,7 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 
 	case ilink.LoginStatusScanned:
 		// User has scanned, waiting for confirmation
+		fmt.Println("\n👀 已扫码，在微信继续操作...")
 		return nil, nil // Continue polling
 
 	case ilink.LoginStatusConfirmed:
@@ -147,8 +144,9 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 		}, nil
 
 	case ilink.LoginStatusExpired:
+		// API says expired - refresh if we haven't hit the limit
 		if f.refreshCount >= f.config.MaxRefreshCount {
-			return nil, fmt.Errorf("QR code expired")
+			return nil, fmt.Errorf("QR code expired after %d refreshes", f.refreshCount)
 		}
 		// Refresh QR code
 		_, err := f.GetQRCode(ctx)
@@ -162,7 +160,7 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 		return nil, fmt.Errorf("login canceled by user")
 
 	default:
-		return nil, fmt.Errorf("unknown status: %d", resp.Status)
+		return nil, fmt.Errorf("unknown status: %s", resp.Status)
 	}
 }
 
@@ -207,8 +205,8 @@ func LoginWithContext(ctx context.Context, client *ilink.Client, displayCallback
 	return flow.PollStatus(ctx)
 }
 
-// PrintQRCode prints the QR code to the terminal for scanning.
-// It uses the QR code content (URL) to generate a terminal-friendly QR code.
+// PrintQRCode prints the QR code for login.
+// It displays the QR code image URL for scanning.
 func PrintQRCode(qr *QRCode) {
 	fmt.Println()
 	fmt.Println("========================================")
@@ -216,27 +214,29 @@ func PrintQRCode(qr *QRCode) {
 	fmt.Println("========================================")
 	fmt.Println()
 
-	// Display QR code image URL if available
+	// Display QR code image URL (primary method)
 	if qr.ImageURL != "" {
-		fmt.Println("QR Code Image URL:")
-		fmt.Println(qr.ImageURL)
+		fmt.Println("请打开手机浏览器，访问以下链接查看二维码：")
+		fmt.Println()
+		fmt.Println("  " + qr.ImageURL)
+		fmt.Println()
+		fmt.Println("或使用微信扫描下方二维码：")
 		fmt.Println()
 	}
 
-	// Display QR code content
+	// Display QR code content as fallback
 	if qr.Content != "" {
-		fmt.Println("QR Code Content (for scanning):")
-		fmt.Println(qr.Content)
+		printQRCode(qr.Content)
 		fmt.Println()
 	}
 
-	fmt.Println("Please scan with WeChat app and confirm login.")
-	fmt.Println("QR code will expire in 5 minutes.")
+	fmt.Println("请使用微信扫码并确认登录")
+	fmt.Println("二维码将在 5 分钟后过期")
 	fmt.Println("========================================")
 }
 
-// PrintQRCodeWithTerm displays the QR code in the terminal using ASCII art.
-// This allows users to scan directly from their terminal.
+// PrintQRCodeWithTerm displays the QR code with both URL and terminal ASCII QR code.
+// Users can either open the URL in browser or scan the terminal QR code.
 func PrintQRCodeWithTerm(qr *QRCode) {
 	fmt.Println()
 	fmt.Println("========================================")
@@ -244,62 +244,39 @@ func PrintQRCodeWithTerm(qr *QRCode) {
 	fmt.Println("========================================")
 	fmt.Println()
 
-	// Display QR code image URL if available
+	// Display QR code image URL (primary method)
 	if qr.ImageURL != "" {
-		fmt.Println("QR Code Image URL:")
-		fmt.Println(qr.ImageURL)
+		fmt.Println("【推荐】打开手机浏览器，访问以下链接：")
+		fmt.Println()
+		fmt.Println("  " + qr.ImageURL)
+		fmt.Println()
+		fmt.Println("然后使用微信扫码登录")
+		fmt.Println()
+		fmt.Println("----------------------------------------")
 		fmt.Println()
 	}
 
-	// Display QR code content for terminal scanning
-	if qr.Content != "" {
-		fmt.Println("Terminal QR Code (scan from screen):")
+	// Display terminal QR code for the Image URL (not the QRCode content)
+	// Users can scan this directly from terminal
+	if qr.ImageURL != "" {
+		fmt.Println("或直接扫描终端中的二维码：")
 		fmt.Println()
-		printAsciiQR(qr.Content)
+		printQRCode(qr.ImageURL)
 		fmt.Println()
 	}
 
-	fmt.Println("Please scan with WeChat app and confirm login.")
-	fmt.Println("QR code will expire in 5 minutes.")
+	fmt.Println("请使用微信扫码并确认登录")
+	fmt.Println("二维码将在 5 分钟后过期")
 	fmt.Println("========================================")
 }
 
-// printAsciiQR prints a simple ASCII representation of the QR code.
-// For a full QR code terminal display, use an external library like qrterminal.
-func printAsciiQR(content string) {
-	// Simple ASCII border
-	width := 40
-	if len(content) > 0 {
-		fmt.Println("+" + repeatStr("-", width) + "+")
-		fmt.Println("|" + centerStr("QR Code Content", width) + "|")
-		fmt.Println("+" + repeatStr("-", width) + "+")
-		// Print content preview (truncated if too long)
-		preview := content
-		if len(preview) > width-2 {
-			preview = preview[:width-5] + "..."
-		}
-		fmt.Println("| " + centerStr(preview, width-2) + " |")
-		fmt.Println("+" + repeatStr("-", width) + "+")
-		fmt.Println()
-		fmt.Println("Note: For best scanning experience,")
-		fmt.Println("open the Image URL in a browser.")
+// printQRCode prints a QR code to the terminal using ASCII characters.
+func printQRCode(content string) {
+	q, err := qrcode.New(content, qrcode.Medium)
+	if err != nil {
+		fmt.Printf("Failed to generate QR code: %v\n", err)
+		return
 	}
-}
-
-// repeatStr repeats a string n times.
-func repeatStr(s string, n int) string {
-	result := ""
-	for i := 0; i < n; i++ {
-		result += s
-	}
-	return result
-}
-
-// centerStr centers a string within a given width.
-func centerStr(s string, width int) string {
-	padding := (width - len(s)) / 2
-	if padding < 0 {
-		padding = 0
-	}
-	return repeatStr(" ", padding) + s + repeatStr(" ", padding)
+	// Print using go-qrcode's ToString method
+	fmt.Println(q.ToSmallString(true))
 }

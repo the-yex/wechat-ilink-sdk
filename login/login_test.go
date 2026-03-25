@@ -19,9 +19,8 @@ func TestLoginFlow_GetQRCode(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ilink.GetBotQRCodeResponse{
-			QRCode:    "qrcode123",
-			ImageURL:  "https://example.com/qr.png",
-			ExpiresIn: 300,
+			QRCode:   "qrcode123",
+			ImageURL: "https://example.com/qr.png",
 		})
 	}))
 	defer server.Close()
@@ -123,8 +122,8 @@ func TestLoginFlow_QRCodeExpired(t *testing.T) {
 		if r.URL.Path == "/ilink/bot/get_bot_qrcode" {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(ilink.GetBotQRCodeResponse{
-				QRCode:    "qrcode123",
-				ExpiresIn: 0, // Already expired
+				QRCode:   "qrcode123",
+				ImageURL: "https://example.com/qr.png",
 			})
 		} else {
 			w.Header().Set("Content-Type", "application/json")
@@ -137,27 +136,27 @@ func TestLoginFlow_QRCodeExpired(t *testing.T) {
 
 	client := ilink.NewClient(ilink.ClientConfig{BaseURL: server.URL})
 
-	config := LoginConfig{
+	// Create QR code with already expired StartedAt time
+	flow := NewLoginFlow(client, LoginConfig{
 		PollInterval:    10 * time.Millisecond,
-		QRCodeExpiry:    1 * time.Millisecond, // Very short expiry
-		MaxRefreshCount: 1,                    // Only 1 refresh allowed
+		MaxRefreshCount: 1,
+	})
+
+	// Manually create expired QR code
+	flow.qrCode = &QRCode{
+		Content:   "qrcode123",
+		ImageURL:  "https://example.com/qr.png",
+		StartedAt: time.Now().Add(-6 * time.Minute), // 6 minutes ago (expired)
 	}
 
-	flow := NewLoginFlow(client, config)
-
-	qr, err := flow.GetQRCode(context.Background())
-	require.NoError(t, err)
-
-	// Make it expire
-	time.Sleep(2 * time.Millisecond)
-	assert.True(t, qr.IsExpired())
+	assert.True(t, flow.qrCode.IsExpired())
 }
 
 func TestQRCode_IsExpired(t *testing.T) {
 	t.Run("not expired", func(t *testing.T) {
 		qr := &QRCode{
 			Content:   "test",
-			ExpiresAt: time.Now().Add(5 * time.Minute),
+			StartedAt: time.Now(),
 		}
 		assert.False(t, qr.IsExpired())
 	})
@@ -165,7 +164,7 @@ func TestQRCode_IsExpired(t *testing.T) {
 	t.Run("expired", func(t *testing.T) {
 		qr := &QRCode{
 			Content:   "test",
-			ExpiresAt: time.Now().Add(-1 * time.Second),
+			StartedAt: time.Now().Add(-6 * time.Minute), // 6 minutes ago
 		}
 		assert.True(t, qr.IsExpired())
 	})

@@ -12,7 +12,7 @@ import (
 
 // TokenUpdateCallback is called when token is updated.
 // This allows the client to update its apiClient and cdnClient.
-type TokenUpdateCallback func(token, baseURL string)
+type TokenUpdateCallback func(token, baseURL, accountID, userID string)
 
 // authService implements AuthService.
 type authService struct {
@@ -59,8 +59,8 @@ func (s *authService) Login(ctx context.Context, displayCallback login.QRCodeCal
 		return nil, err
 	}
 
-	// Update token
-	s.SetToken(result.Token, result.BaseURL)
+	// Update token with full user info
+	s.SetToken(result.Token, result.BaseURL, result.AccountID, result.UserID)
 
 	// Save token if store is available
 	if s.tokenStore != nil && result.AccountID != "" {
@@ -68,6 +68,7 @@ func (s *authService) Login(ctx context.Context, displayCallback login.QRCodeCal
 			Token:   result.Token,
 			BaseURL: result.BaseURL,
 			UserID:  result.UserID,
+			SavedAt: time.Now().Format(time.RFC3339),
 		})
 	}
 
@@ -75,7 +76,7 @@ func (s *authService) Login(ctx context.Context, displayCallback login.QRCodeCal
 }
 
 // SetToken sets the authentication token.
-func (s *authService) SetToken(token, baseURL string) {
+func (s *authService) SetToken(token, baseURL, accountID, userID string) {
 	s.config.Token = token
 	if baseURL != "" {
 		s.config.BaseURL = baseURL
@@ -83,7 +84,7 @@ func (s *authService) SetToken(token, baseURL string) {
 
 	// Notify client to update apiClient and cdnClient
 	if s.onTokenUpdate != nil {
-		s.onTokenUpdate(token, baseURL)
+		s.onTokenUpdate(token, baseURL, accountID, userID)
 	}
 }
 
@@ -100,8 +101,7 @@ func (s *authService) LoadToken(accountID string) error {
 	if token == nil {
 		return fmt.Errorf("no token found for account %s", accountID)
 	}
-
-	s.SetToken(token.Token, token.BaseURL)
+	s.SetToken(token.Token, token.BaseURL, accountID, token.UserID)
 	return nil
 }
 
@@ -111,4 +111,17 @@ func (s *authService) ListAccounts() ([]string, error) {
 		return nil, fmt.Errorf("no token store configured")
 	}
 	return s.tokenStore.List()
+}
+
+// GetCurrentUser returns the current logged-in user info.
+func (s *authService) GetCurrentUser() *ilink.LoginResult {
+	if s.config.Token == "" {
+		return nil
+	}
+	return &ilink.LoginResult{
+		Token:     s.config.Token,
+		AccountID: "", // Not available from config alone
+		UserID:    "", // Not available from config alone
+		BaseURL:   s.config.BaseURL,
+	}
 }

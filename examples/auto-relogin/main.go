@@ -7,31 +7,29 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
 	"github.com/the-yex/wechat-ilink-sdk/login"
 )
 
-// QRCodeLoginWithAutoReply demonstrates QR code login with a simple auto-reply bot.
+// This example demonstrates automatic re-login when session expires.
 func main() {
 	// Setup logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
-	fmt.Println("=== WeChat iLink SDK - QR Code Login with Auto-Reply ===")
+	fmt.Println("=== WeChat iLink SDK - Auto Re-login Demo ===")
 
-	// Step 1: Create file-based token store for persistence
+	// Create token store
 	tokenStore, err := login.NewFileTokenStore("")
 	if err != nil {
 		logger.Error("failed to create token store", "error", err)
 		os.Exit(1)
 	}
 
-	// Step 2: Create client with token store
-	// SDK will automatically load stored token if available
+	// Create client first without callback
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
@@ -42,12 +40,24 @@ func main() {
 	}
 	defer client.Close()
 
-	// Step 3: Start login (SDK will skip QR code if valid token is stored)
-	fmt.Println("\nStarting login...")
+	// Set the session expired callback using the client
+	client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+		// This callback is invoked when session expires
+		fmt.Println("\n========================================")
+		fmt.Println("  Session expired! Please re-scan QR code")
+		fmt.Println("========================================")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+		// Perform QR code login again
+		return client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
+			login.PrintQRCodeWithTerm(qr)
+			return nil
+		})
+	})
 
+	// Initial login
+	fmt.Println("\nStarting initial login...")
+
+	ctx := context.Background()
 	result, err := client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
 		login.PrintQRCodeWithTerm(qr)
 		return nil
@@ -58,14 +68,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Step 4: Login successful
 	fmt.Println("\n=== Login Successful ===")
 	fmt.Printf("Account ID: %s\n", result.AccountID)
 	fmt.Printf("User ID:  %s\n", result.UserID)
 	fmt.Println("========================")
 
-	// Step 5: Start simple message listener with re-login callback
-	fmt.Println("Starting message listener...")
+	// Start message listener
+	fmt.Println("\nStarting message listener...")
+	fmt.Println("When session expires, you will be prompted to re-scan QR code.")
 	fmt.Println("Press Ctrl+C to stop.")
 
 	// Setup signal handling
@@ -81,18 +91,15 @@ func main() {
 		runCancel()
 	}()
 
-	// Run message loop with re-login callback
+	// Run message loop
+	// If session expires, OnSessionExpired callback will be invoked automatically
 	if err := client.Run(runCtx, func(ctx context.Context, msg *ilink.Message) error {
-		logger.Info("received message",
-			"from", msg.FromUserID,
-		)
+		logger.Info("received message", "from", msg.FromUserID)
+		logger.Info("message content", "text", msg.GetText())
 
-		// Auto-reply to text messages
 		text := msg.GetText()
 		if text != "" {
-			logger.Info("message content", "text", text)
-
-			reply := fmt.Sprintf("[Auto-reply] I received your message: %s", text)
+			reply := fmt.Sprintf("[Auto-reply] Received: %s", text)
 			if err := client.SendText(ctx, msg.FromUserID, reply); err != nil {
 				logger.Error("failed to send reply", "error", err)
 			}

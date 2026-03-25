@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +52,9 @@ type Client struct {
 	mu       sync.Mutex
 	running  bool
 	stopChan chan struct{}
+
+	// Current user info (cached from login/token load)
+	currentUser *ilink.LoginResult
 }
 
 // NewClient creates a new WeChat Bot client with the given options.
@@ -125,14 +129,38 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 	}
 
+	// Auto-load token if token store is configured
+	// This allows seamless re-authentication without QR code scan
+	if cfg.TokenStore != nil {
+		accounts, err := tokenStore.List()
+		if err == nil && len(accounts) > 0 {
+			// Load the first account's token
+			tokenInfo, err := tokenStore.Load(accounts[0])
+			if err == nil && tokenInfo != nil && tokenInfo.Token != "" {
+				// Trigger token update with stored user info
+				client.onTokenUpdate(tokenInfo.Token, tokenInfo.BaseURL, accounts[0], tokenInfo.UserID)
+				cfg.Logger.Debug("loaded stored token", "account", accounts[0])
+			}
+		}
+	}
+
 	return client, nil
 }
 
 // onTokenUpdate handles token updates from AuthService.
 // It recreates the apiClient and cdnClient with the new token.
-func (c *Client) onTokenUpdate(token, baseURL string) {
+func (c *Client) onTokenUpdate(token, baseURL, accountID, userID string) {
 	if baseURL != "" {
 		c.config.BaseURL = baseURL
+	}
+	c.config.Token = token // Update config token so IsLoggedIn() works
+
+	// Update current user info
+	c.currentUser = &ilink.LoginResult{
+		Token:     token,
+		AccountID: accountID,
+		UserID:    userID,
+		BaseURL:   baseURL,
 	}
 
 	// Recreate API client with new token
@@ -197,17 +225,45 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 		default:
 		}
 
-		// Check if session is paused
+		// Check if session is paused (session timeout)
 		if c.apiClient.IsPaused() {
 			// Dispatch session expired event
 			c.events.Dispatch(ctx, &event.Event{
 				Type:    event.EventTypeSessionExpired,
 				Context: ctx,
 			})
-			c.config.Logger.Warn("session paused, waiting",
-				"remaining", c.apiClient.RemainingPause(),
-			)
-			continue
+			c.config.Logger.Warn("session expired, triggering re-login callback")
+
+			// Clear stored token
+			if c.tokenStore != nil {
+				accounts, _ := c.tokenStore.List()
+				for _, accountID := range accounts {
+					_ = c.tokenStore.Delete(accountID)
+				}
+			}
+			// Reset login state
+			c.config.Token = ""
+			c.currentUser = nil
+
+			// Call the session expired callback if set
+			if c.config.OnSessionExpired != nil {
+				result, err := c.config.OnSessionExpired(ctx)
+				if err != nil {
+					c.config.Logger.Error("re-login failed", "error", err)
+					return fmt.Errorf("re-login failed: %w", err)
+				}
+				if result == nil {
+					// Callback returned nil, stop the loop
+					return nil
+				}
+				// Re-login successful, reset session guard and continue
+				c.apiClient.ResetSession()
+				c.config.Logger.Info("re-login successful, continuing message loop")
+				continue
+			}
+
+			// No callback, return error
+			return fmt.Errorf("session expired, please re-login")
 		}
 
 		// Long poll for messages
@@ -215,6 +271,38 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			GetUpdatesBuf: getUpdatesBuf,
 		})
 		if err != nil {
+			// Check if it's an authentication error (token expired)
+			if isAuthError(err) {
+				c.config.Logger.Warn("token expired, triggering re-login callback")
+
+				// Clear stored token
+				if c.tokenStore != nil {
+					accounts, _ := c.tokenStore.List()
+					for _, accountID := range accounts {
+						_ = c.tokenStore.Delete(accountID)
+					}
+				}
+				// Reset login state
+				c.config.Token = ""
+				c.currentUser = nil
+
+				// Call the session expired callback if set
+				if c.config.OnSessionExpired != nil {
+					result, callbackErr := c.config.OnSessionExpired(ctx)
+					if callbackErr != nil {
+						c.config.Logger.Error("re-login failed", "error", callbackErr)
+						return fmt.Errorf("re-login failed: %w", callbackErr)
+					}
+					if result == nil {
+						// Callback returned nil, stop the loop
+						return nil
+					}
+					// Re-login successful, reset session guard and continue
+					c.apiClient.ResetSession()
+					c.config.Logger.Info("re-login successful, continuing message loop")
+					continue
+				}
+			}
 			// Dispatch error event
 			c.events.Dispatch(ctx, &event.Event{
 				Type:    event.EventTypeError,
@@ -233,9 +321,9 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 		// Process messages
 		for _, msg := range resp.Messages {
-			// Store context token
+			// Store context token (use empty accountID for simple lookup)
 			if msg.ContextToken != "" && msg.FromUserID != "" {
-				c.contextTokens.Set(msg.ToUserID, msg.FromUserID, msg.ContextToken)
+				c.contextTokens.Set("", msg.FromUserID, msg.ContextToken)
 			}
 
 			// Dispatch message event
@@ -302,8 +390,45 @@ func (c *Client) DownloadMedia(ctx context.Context, req *media.DownloadRequest) 
 // --- AuthService delegation ---
 
 // Login performs QR code login and returns the login result.
-// The displayCallback is called with context and the QR code for display.
+// If a valid token is already stored, it returns the cached login result without QR code scan.
+// The displayCallback is called with context and the QR code for display (only if scan is needed).
 func (c *Client) Login(ctx context.Context, displayCallback login.QRCodeCallback) (*ilink.LoginResult, error) {
+	// If already logged in with a valid token, verify it's still valid
+	if c.IsLoggedIn() && c.currentUser != nil {
+		c.config.Logger.Debug("verifying stored token")
+
+		// Verify token by calling GetConfig API
+		resp, err := c.apiClient.GetConfig(ctx, &ilink.GetConfigRequest{
+			ILinkUserID:  c.currentUser.UserID,
+			ContextToken: c.currentUser.Token,
+			BaseInfo: ilink.BaseInfo{
+				ChannelVersion: Version,
+			},
+		})
+		if err == nil && resp != nil && resp.ErrCode == 0 {
+			c.config.Logger.Debug("token is valid, skipping QR code scan")
+			return c.currentUser, nil
+		}
+
+		// Token invalid, log the reason
+		c.config.Logger.Warn("stored token is invalid, will perform QR code login")
+	}
+
+	// Clear invalid token if present
+	if c.tokenStore != nil {
+		accounts, _ := c.tokenStore.List()
+		for _, accountID := range accounts {
+			_ = c.tokenStore.Delete(accountID)
+		}
+		if len(accounts) > 0 {
+			c.config.Logger.Debug("cleared expired token")
+		}
+	}
+
+	// Reset login state
+	c.config.Token = ""
+	c.currentUser = nil
+
 	result, err := c.auth.Login(ctx, displayCallback)
 	if err != nil {
 		return nil, err
@@ -328,8 +453,8 @@ func (c *Client) LoginSimple(ctx context.Context, displayCallback func(qr *login
 }
 
 // SetToken sets the authentication token.
-func (c *Client) SetToken(token, baseURL string) {
-	c.auth.SetToken(token, baseURL)
+func (c *Client) SetToken(token, baseURL, accountID, userID string) {
+	c.auth.SetToken(token, baseURL, accountID, userID)
 }
 
 // LoadToken loads a stored token for an account.
@@ -372,6 +497,13 @@ func (c *Client) UsePlugin(ctx context.Context, p plugin.Plugin) error {
 	return p.Initialize(ctx, c)
 }
 
+// SetOnSessionExpired sets the callback for session expiration.
+// This allows setting the callback after client creation, which is useful
+// when the callback needs to reference the client itself.
+func (c *Client) SetOnSessionExpired(callback SessionExpiredCallback) {
+	c.config.OnSessionExpired = callback
+}
+
 // UsePluginSimple registers a plugin without a context.
 // Deprecated: Use UsePlugin(ctx, plugin) instead.
 func (c *Client) UsePluginSimple(p plugin.Plugin) error {
@@ -403,6 +535,16 @@ func (c *Client) Auth() service.AuthService { return c.auth }
 
 // Session returns the session service.
 func (c *Client) Session() service.SessionService { return c.session }
+
+// IsLoggedIn returns true if a token is configured.
+func (c *Client) IsLoggedIn() bool {
+	return c.config.Token != ""
+}
+
+// CurrentUser returns the current logged-in user info.
+func (c *Client) CurrentUser() *ilink.LoginResult {
+	return c.currentUser
+}
 
 // Events returns the event dispatcher for subscribing to SDK events.
 //
@@ -470,4 +612,17 @@ func (c *Client) Close() error {
 // Logger returns the configured logger.
 func (c *Client) Logger() *slog.Logger {
 	return c.config.Logger
+}
+
+// isAuthError checks if an error is related to authentication failure.
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "401") ||
+		strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "invalid token") ||
+		strings.Contains(errStr, "token expired") ||
+		strings.Contains(errStr, "session timeout")
 }

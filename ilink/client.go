@@ -37,8 +37,8 @@ type ClientConfig struct {
 // Client handles all WeChat API communication.
 type Client struct {
 	config  ClientConfig
-	http    *http.Client        // Shared HTTP client for normal requests
-	httpLP  *http.Client        // HTTP client for long-polling
+	http    *http.Client // Shared HTTP client for normal requests
+	httpLP  *http.Client // HTTP client for long-polling
 	session *SessionGuard
 	version string
 }
@@ -144,23 +144,17 @@ func (c *Client) doPost(ctx context.Context, endpoint string, reqBody interface{
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-
 	// Check HTTP status
 	if resp.StatusCode >= 400 {
 		return &APIError{
 			Code:    resp.StatusCode,
-			Message: string(respData),
+			Message: "response status: " + resp.Status,
 		}
 	}
 
-	// Decode response
-	if respBody != nil && len(respData) > 0 {
-		if err := json.Unmarshal(respData, respBody); err != nil {
+	// Decode response (only if respBody is provided)
+	if respBody != nil {
+		if err = json.NewDecoder(resp.Body).Decode(respBody); err != nil {
 			return fmt.Errorf("unmarshal response: %w", err)
 		}
 	}
@@ -194,6 +188,7 @@ func (c *Client) GetUpdates(ctx context.Context, req *GetUpdatesRequest) (*GetUp
 
 // SendMessage sends a message downstream.
 func (c *Client) SendMessage(ctx context.Context, req *SendMessageRequest) error {
+	req.BaseInfo = c.buildBaseInfo()
 	return c.doPost(ctx, "ilink/bot/sendmessage", req, nil)
 }
 
@@ -234,6 +229,12 @@ func (c *Client) RemainingPause() time.Duration {
 	return c.session.RemainingPause()
 }
 
+// ResetSession resets the session pause state.
+// This should be called after successful re-login.
+func (c *Client) ResetSession() {
+	c.session.Reset()
+}
+
 // GetBotQRCode retrieves a QR code for bot login.
 func (c *Client) GetBotQRCode(ctx context.Context, req *GetBotQRCodeRequest) (*GetBotQRCodeResponse, error) {
 	// Build URL with query parameters
@@ -265,19 +266,13 @@ func (c *Client) GetBotQRCode(ctx context.Context, req *GetBotQRCodeRequest) (*G
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get QR code failed: status=%d, body=%s", resp.StatusCode, string(respData))
+		return nil, fmt.Errorf("get QR code failed: status=%d", resp.StatusCode)
 	}
-
 	// Parse response
 	var result GetBotQRCodeResponse
-	if err := json.Unmarshal(respData, &result); err != nil {
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 

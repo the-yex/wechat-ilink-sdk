@@ -1,5 +1,18 @@
 package types
 
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+)
+
+// generateClientID generates a unique client ID for message sending.
+func generateClientID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("go-weixin-%s", hex.EncodeToString(b))
+}
+
 // Message represents a unified WeChat message.
 type Message struct {
 	Seq          int64          `json:"seq,omitempty"`
@@ -59,6 +72,7 @@ func (m *Message) IsNew() bool {
 func NewTextMessage(toUserID, text, contextToken string) *Message {
 	return &Message{
 		ToUserID:     toUserID,
+		ClientID:     generateClientID(),
 		MessageType:  MessageTypeBot,
 		MessageState: MessageStateFinish,
 		ContextToken: contextToken,
@@ -75,6 +89,7 @@ func NewTextMessage(toUserID, text, contextToken string) *Message {
 func NewImageMessage(toUserID, contextToken string, imageItem *ImageItem) *Message {
 	return &Message{
 		ToUserID:     toUserID,
+		ClientID:     generateClientID(),
 		MessageType:  MessageTypeBot,
 		MessageState: MessageStateFinish,
 		ContextToken: contextToken,
@@ -91,6 +106,7 @@ func NewImageMessage(toUserID, contextToken string, imageItem *ImageItem) *Messa
 func NewVideoMessage(toUserID, contextToken string, videoItem *VideoItem) *Message {
 	return &Message{
 		ToUserID:     toUserID,
+		ClientID:     generateClientID(),
 		MessageType:  MessageTypeBot,
 		MessageState: MessageStateFinish,
 		ContextToken: contextToken,
@@ -107,6 +123,7 @@ func NewVideoMessage(toUserID, contextToken string, videoItem *VideoItem) *Messa
 func NewFileMessage(toUserID, contextToken string, fileItem *FileItem) *Message {
 	return &Message{
 		ToUserID:     toUserID,
+		ClientID:     generateClientID(),
 		MessageType:  MessageTypeBot,
 		MessageState: MessageStateFinish,
 		ContextToken: contextToken,

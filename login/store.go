@@ -22,10 +22,10 @@ type TokenStore interface {
 
 // TokenInfo contains stored token information.
 type TokenInfo struct {
-	Token     string `json:"token"`
-	BaseURL   string `json:"base_url,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	SavedAt   string `json:"saved_at,omitempty"`
+	Token   string `json:"token"`
+	BaseURL string `json:"base_url,omitempty"`
+	UserID  string `json:"user_id,omitempty"`
+	SavedAt string `json:"saved_at,omitempty"`
 }
 
 // FileTokenStore implements TokenStore using file system.
@@ -35,14 +35,10 @@ type FileTokenStore struct {
 }
 
 // NewFileTokenStore creates a new file-based token store.
-// If baseDir is empty, it defaults to ~/.weixin/
+// If baseDir is empty, it defaults to ./.weixin/ (current working directory)
 func NewFileTokenStore(baseDir string) (*FileTokenStore, error) {
 	if baseDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("get home dir: %w", err)
-		}
-		baseDir = filepath.Join(home, ".weixin")
+		baseDir = ".weixin"
 	}
 
 	// Ensure directory exists

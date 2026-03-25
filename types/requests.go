@@ -5,24 +5,25 @@ type GetUpdatesRequest struct {
 	// Deprecated: Use GetUpdatesBuf instead
 	SyncBuf string `json:"sync_buf,omitempty"`
 	// Full context buf cached locally; send "" when none (first request or after reset)
-	GetUpdatesBuf string    `json:"get_updates_buf,omitempty"`
+	GetUpdatesBuf string   `json:"get_updates_buf,omitempty"`
 	BaseInfo      BaseInfo `json:"base_info"`
 }
 
 // GetUpdatesResponse represents a getUpdates API response.
 type GetUpdatesResponse struct {
-	Ret                int64      `json:"ret,omitempty"`
-	ErrCode            int        `json:"errcode,omitempty"`
-	ErrMsg             string     `json:"errmsg,omitempty"`
-	Messages           []*Message `json:"msgs,omitempty"`
-	SyncBuf            string     `json:"sync_buf,omitempty"`          // Deprecated
-	GetUpdatesBuf      string     `json:"get_updates_buf,omitempty"`
-	LongPollTimeoutMs  int        `json:"longpolling_timeout_ms,omitempty"`
+	Ret               int64      `json:"ret,omitempty"`
+	ErrCode           int        `json:"errcode,omitempty"`
+	ErrMsg            string     `json:"errmsg,omitempty"`
+	Messages          []*Message `json:"msgs,omitempty"`
+	SyncBuf           string     `json:"sync_buf,omitempty"` // Deprecated
+	GetUpdatesBuf     string     `json:"get_updates_buf,omitempty"`
+	LongPollTimeoutMs int        `json:"longpolling_timeout_ms,omitempty"`
 }
 
 // SendMessageRequest represents a sendMessage API request.
 type SendMessageRequest struct {
-	Message *Message `json:"msg,omitempty"`
+	Message  *Message  `json:"msg,omitempty"`
+	BaseInfo BaseInfo  `json:"base_info"`
 }
 
 // SendMessageResponse represents a sendMessage API response.
@@ -67,14 +68,15 @@ type SendTypingResponse struct {
 
 // GetConfigRequest represents a getConfig API request.
 type GetConfigRequest struct {
-	ILinkUserID  string  `json:"ilink_user_id,omitempty"`
-	ContextToken string  `json:"context_token,omitempty"`
+	ILinkUserID  string   `json:"ilink_user_id,omitempty"`
+	ContextToken string   `json:"context_token,omitempty"`
 	BaseInfo     BaseInfo `json:"base_info"`
 }
 
 // GetConfigResponse represents a getConfig API response.
 type GetConfigResponse struct {
 	Ret          int    `json:"ret,omitempty"`
+	ErrCode      int    `json:"errcode,omitempty"`
 	ErrMsg       string `json:"errmsg,omitempty"`
 	TypingTicket string `json:"typing_ticket,omitempty"`
 }
@@ -87,17 +89,14 @@ type GetBotQRCodeRequest struct {
 
 // GetBotQRCodeResponse represents a get_bot_qrcode API response.
 type GetBotQRCodeResponse struct {
-	Ret       int    `json:"ret,omitempty"`
-	ErrCode   int    `json:"errcode,omitempty"`
-	ErrMsg    string `json:"errmsg,omitempty"`
-	QRCode    string `json:"qrcode,omitempty"`
-	ImageURL  string `json:"image_url,omitempty"`
-	ExpiresIn int    `json:"expires_in,omitempty"`
+	Ret      int    `json:"ret,omitempty"`
+	QRCode   string `json:"qrcode,omitempty"`
+	ImageURL string `json:"qrcode_img_content,omitempty"` // API returns qrcode_img_content
 }
 
 // GetQRCodeStatusRequest represents a get_qrcode_status API request.
 type GetQRCodeStatusRequest struct {
-	QRCode   string  `json:"qrcode,omitempty"`
+	QRCode   string   `json:"qrcode,omitempty"`
 	BaseInfo BaseInfo `json:"base_info"`
 }
 

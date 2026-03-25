@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -27,7 +26,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create client (without token - will login)
+	// Create client with token store
+	// SDK will automatically load stored token if available
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
@@ -43,45 +43,20 @@ func main() {
 	}
 	defer client.Close()
 
-	// Check if we have stored tokens
-	accounts, err := client.ListAccounts()
-	if err == nil && len(accounts) > 0 {
-		logger.Info("found stored accounts", "accounts", accounts)
-		// Load the first account
-		if err := client.LoadToken(accounts[0]); err != nil {
-			logger.Error("load token", "error", err)
-		} else {
-			logger.Info("loaded stored token", "account", accounts[0])
-		}
-	} else {
-		// No stored token, need to login
-		logger.Info("no stored token, starting login flow...")
-
-		result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
-			// Display QR code - you can:
-			// 1. Print the URL for user to scan
-			// 2. Generate QR code image in terminal
-			// 3. Show QR code image URL in a web interface
-			fmt.Println("\n========================================")
-			fmt.Println("Scan this QR code with WeChat to login:")
-			fmt.Println(qr.Content)
-			if qr.ImageURL != "" {
-				fmt.Println("\nOr open this URL:")
-				fmt.Println(qr.ImageURL)
-			}
-			fmt.Println("========================================")
-			return nil
-		})
-		if err != nil {
-			logger.Error("login failed", "error", err)
-			os.Exit(1)
-		}
-
-		logger.Info("login successful",
-			"account_id", result.AccountID,
-			"user_id", result.UserID,
-		)
+	// Login (SDK will skip QR code if valid token is stored)
+	result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
+		login.PrintQRCodeWithTerm(qr)
+		return nil
+	})
+	if err != nil {
+		logger.Error("login failed", "error", err)
+		os.Exit(1)
 	}
+
+	logger.Info("login successful",
+		"account_id", result.AccountID,
+		"user_id", result.UserID,
+	)
 
 	// Setup signal handling
 	ctx, cancel := context.WithCancel(context.Background())

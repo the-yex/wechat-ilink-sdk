@@ -55,12 +55,13 @@ const (
 )
 
 // LoginStatus represents QR code login status.
-type LoginStatus int
+// API returns string values: "wait", "scaned", "confirmed", "expired"
+type LoginStatus string
 
 const (
-	LoginStatusWaiting LoginStatus = iota + 1 // Waiting for scan
-	LoginStatusScanned                         // QR code scanned
-	LoginStatusConfirmed                       // Login confirmed
-	LoginStatusExpired                         // QR code expired
-	LoginStatusCanceled                        // Login canceled
+	LoginStatusWaiting  LoginStatus = "wait"      // Waiting for scan
+	LoginStatusScanned  LoginStatus = "scaned"    // QR code scanned
+	LoginStatusConfirmed LoginStatus = "confirmed" // Login confirmed
+	LoginStatusExpired  LoginStatus = "expired"   // QR code expired
+	LoginStatusCanceled LoginStatus = "canceled"  // Login canceled (not used by API)
 )

@@ -83,3 +83,20 @@ func WithTokenStore(store login.TokenStore) Option {
 		c.TokenStore = store
 	}
 }
+
+// WithOnSessionExpired sets the callback for session expiration.
+// When the session expires, this callback is invoked to allow re-login.
+// Example:
+//
+//	client, _ := ilinksdk.NewClient(
+//	    ilinksdk.WithTokenStore(tokenStore),
+//	    ilinksdk.WithOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+//	        fmt.Println("Session expired, please scan QR code to re-login")
+//	        return client.Login(ctx, displayQRCode)
+//	    }),
+//	)
+func WithOnSessionExpired(callback SessionExpiredCallback) Option {
+	return func(c *Config) {
+		c.OnSessionExpired = callback
+	}
+}

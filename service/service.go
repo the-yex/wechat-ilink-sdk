@@ -60,13 +60,16 @@ type AuthService interface {
 	Login(ctx context.Context, displayCallback login.QRCodeCallback) (*ilink.LoginResult, error)
 
 	// SetToken sets the authentication token.
-	SetToken(token, baseURL string)
+	SetToken(token, baseURL, accountID, userID string)
 
 	// LoadToken loads a stored token for an account.
 	LoadToken(accountID string) error
 
 	// ListAccounts lists all stored account IDs.
 	ListAccounts() ([]string, error)
+
+	// GetCurrentUser returns the current logged-in user info.
+	GetCurrentUser() *ilink.LoginResult
 }
 
 // SessionService handles session state queries.
