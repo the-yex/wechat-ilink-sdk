@@ -95,9 +95,9 @@ func main() {
 	// If session expires, OnSessionExpired callback will be invoked automatically
 	if err := client.Run(runCtx, func(ctx context.Context, msg *ilink.Message) error {
 		logger.Info("received message", "from", msg.FromUserID)
-		logger.Info("message content", "text", msg.GetText())
-
 		text := msg.GetText()
+		logger.Info("message content", "text", text)
+
 		if text != "" {
 			reply := fmt.Sprintf("[Auto-reply] Received: %s", text)
 			if err := client.SendText(ctx, msg.FromUserID, reply); err != nil {

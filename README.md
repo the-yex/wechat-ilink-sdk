@@ -1,5 +1,7 @@
 # WeChat iLink SDK for Go
 
+[English](./README.md) | [中文文档](./README_zh_CN.md)
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/the-yex/wechat-ilink-sdk.svg)](https://pkg.go.dev/github.com/the-yex/wechat-ilink-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -8,6 +10,7 @@ A professional, highly extensible Go SDK for building WeChat bot applications ba
 ## Features
 
 - **QR Code Login** - Scan QR code to authenticate, tokens persisted locally
+- **Auto Re-login** - Automatically validates stored tokens and handles session expiry
 - **Message Handling** - Receive and send text, image, video, file, and voice messages
 - **CDN Media** - AES-128-ECB encrypted upload/download for media files
 - **Middleware System** - Built-in logging, retry, and recovery middleware
@@ -53,27 +56,25 @@ import (
     "github.com/the-yex/wechat-ilink-sdk"
     "github.com/the-yex/wechat-ilink-sdk/ilink"
     "github.com/the-yex/wechat-ilink-sdk/login"
-    "github.com/the-yex/wechat-ilink-sdk/middleware"
 )
 
 func main() {
     logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-    // Create token store for persistence
+    // Create token store for persistence (auto-login support)
     tokenStore, _ := login.NewFileTokenStore("")
 
     // Create client
     client, _ := ilinksdk.NewClient(
         ilinksdk.WithLogger(logger),
         ilinksdk.WithTokenStore(tokenStore),
-        ilinksdk.WithMiddleware(middleware.Logging(logger)),
     )
     defer client.Close()
 
-    // Login via QR code (token is saved automatically)
+    // Login via QR code (SDK validates stored token first)
     result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
-        fmt.Println("Scan this QR code:")
-        fmt.Println(qr.Content)
+        // Display QR code for user to scan
+        login.PrintQRCodeWithTerm(qr)
         return nil
     })
     if err != nil {
@@ -85,7 +86,11 @@ func main() {
     // Run bot
     ctx := context.Background()
     client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
-        return client.SendText(ctx, msg.FromUserID, "Hello!")
+        // Auto-reply to text messages
+        if text := msg.GetText(); text != "" {
+            return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
+        }
+        return nil
     })
 }
 ```
@@ -102,7 +107,7 @@ wechat-ilink-sdk/
 ├── service/           # Service layer (Message, Media, Auth, Session)
 ├── types/             # Request/Response types
 ├── ilink/             # iLink protocol layer
-├── login/             # Login service
+├── login/             # Login service & token storage
 ├── media/             # CDN media handling
 ├── middleware/        # Middleware system
 ├── plugin/            # Plugin system
@@ -120,7 +125,46 @@ client, err := ilinksdk.NewClient(
     ilinksdk.WithTimeout(30 * time.Second),
     ilinksdk.WithRetry(3, time.Second, 5 * time.Second),
     ilinksdk.WithLogger(slog.Default()),
+    ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithPlugins(myPlugin1, myPlugin2),
 )
+```
+
+## Token Management
+
+### Auto-login
+
+The SDK automatically handles token persistence:
+
+1. **First Run**: Display QR code → User scans → Token saved to store
+2. **Subsequent Runs**: SDK loads stored token → Validates with API → Skip QR code if valid
+
+```go
+// FileTokenStore saves tokens to ~/.wechat-ilink/tokens.json by default
+tokenStore, _ := login.NewFileTokenStore("")
+
+// Or specify custom directory
+tokenStore, _ := login.NewFileTokenStore("/path/to/tokens")
+
+// Or use in-memory store (no persistence)
+tokenStore := login.NewMemoryTokenStore()
+```
+
+### Token Validation
+
+The SDK validates stored tokens on startup using the `getConfig` API. If the token is expired or invalid, it automatically clears the stored token and prompts for QR code scan.
+
+### Session Expiry Handling
+
+```go
+// Set callback for session expiry
+client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+    fmt.Println("Session expired! Please re-scan QR code")
+    return client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
+        login.PrintQRCodeWithTerm(qr)
+        return nil
+    })
+})
 ```
 
 ## Middleware
@@ -152,8 +196,6 @@ client.Use(CustomMiddleware())
 
 ## Event System
 
-Subscribe to SDK events for reactive programming:
-
 ### Available Events
 
 | Event | When Fired | Data Type |
@@ -168,35 +210,16 @@ Subscribe to SDK events for reactive programming:
 ### Using Event Handlers
 
 ```go
-// Subscribe using convenience methods
 client.OnMessage(func(ctx context.Context, e *event.Event) error {
     msg := e.Data.(*ilink.Message)
-    log.Printf("收到消息: %s", msg.Content)
+    log.Printf("Received: %s", msg.GetText())
     return nil
 })
 
 client.OnSessionExpired(func(ctx context.Context, e *event.Event) error {
-    log.Println("Session 过期，需要重新登录")
-    // Auto re-login logic
+    log.Println("Session expired, need to re-login")
     return nil
 })
-
-client.OnError(func(ctx context.Context, e *event.Event) error {
-    err := e.Data.(error)
-    log.Printf("错误: %v", err)
-    return nil
-})
-```
-
-### Advanced Usage
-
-```go
-// Direct dispatcher access for more control
-client.Events().Subscribe(event.EventTypeMessage, handler)
-client.Events().Unsubscribe(event.EventTypeMessage)
-
-// Synchronous dispatch (blocks until all handlers complete)
-client.Events().DispatchSync(ctx, &event.Event{...})
 ```
 
 ## Plugin System
@@ -214,8 +237,11 @@ func (p *MyPlugin) OnMessage(ctx context.Context, msg *ilink.Message) error {
 }
 func (p *MyPlugin) OnError(ctx context.Context, err error) {}
 
-client.UsePlugin(&MyPlugin{})
+// Register plugin
+client.UsePlugin(context.Background(), &MyPlugin{})
 ```
+
+See [examples/plugins/README.md](./examples/plugins/README.md) for detailed plugin development guide.
 
 ## CDN Media
 
@@ -256,8 +282,15 @@ if errors.Is(err, ilinksdk.ErrContextTokenRequired) {
 
 See the [examples](./examples/) directory:
 
-- `basic-bot` - Echo bot with QR code login
-- `ai-assistant` - AI assistant integration pattern
+| Example | Description |
+|---------|-------------|
+| `simple-login` | Basic QR code login |
+| `qrcode-login` | Login with token storage |
+| `qrcode-login-with-image` | Full bot with auto-reply |
+| `auto-relogin` | Auto re-login on session expiry |
+| `basic-bot` | Echo bot with middleware |
+| `plugins` | Plugin development examples |
+| `ai-assistant` | AI assistant integration pattern |
 
 ## Development
 
