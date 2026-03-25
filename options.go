@@ -1,6 +1,7 @@
 package ilinksdk
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -98,5 +99,77 @@ func WithTokenStore(store login.TokenStore) Option {
 func WithOnSessionExpired(callback SessionExpiredCallback) Option {
 	return func(c *Config) {
 		c.OnSessionExpired = callback
+	}
+}
+
+// WithOnLogin sets the callback for QR code login.
+// When Run() is called without prior Login(), this callback is used to display QR code.
+// Example:
+//
+//	client, _ := ilinksdk.NewClient(
+//	    ilinksdk.WithTokenStore(tokenStore),
+//	    ilinksdk.WithOnLogin(func(ctx context.Context, qr *login.QRCode) error {
+//	        login.PrintQRCodeWithTerm(qr)
+//	        return nil
+//	    }),
+//	)
+//	client.Run(ctx, handler) // Will auto-login if needed
+func WithOnLogin(callback login.QRCodeCallback) Option {
+	return func(c *Config) {
+		c.OnLogin = callback
+	}
+}
+
+// WithOnLoginSuccess sets the callback for successful login.
+// Use this to save login info to your own storage (database, cache, etc.)
+// Example:
+//
+//	client, _ := ilinksdk.NewClient(
+//	    ilinksdk.WithOnLoginSuccess(func(ctx context.Context, result *ilink.LoginResult) error {
+//	        // Save to database
+//	        db.SaveUser(result.AccountID, result.Token, result.UserID)
+//	        return nil
+//	    }),
+//	)
+func WithOnLoginSuccess(callback LoginSuccessCallback) Option {
+	return func(c *Config) {
+		c.OnLoginSuccess = callback
+	}
+}
+
+// WithTokenProvider sets the provider for loading stored token.
+// Use this to load token from your own storage instead of TokenStore.
+// Example:
+//
+//	client, _ := ilinksdk.NewClient(
+//	    ilinksdk.WithTokenProvider(func(ctx context.Context) (*login.TokenInfo, error) {
+//	        // Load from database
+//	        user := db.GetUser(accountID)
+//	        if user == nil {
+//	            return nil, nil // No token, will trigger login
+//	        }
+//	        return &login.TokenInfo{Token: user.Token}, nil
+//	    }),
+//	)
+func WithTokenProvider(provider TokenProvider) Option {
+	return func(c *Config) {
+		c.TokenProvider = provider
+	}
+}
+
+// WithOnTokenInvalid sets the callback for when token becomes invalid.
+// Use this to clear token from your own storage.
+// Only works when TokenProvider is set.
+// Example:
+//
+//	client, _ := ilinksdk.NewClient(
+//	    ilinksdk.WithTokenProvider(loadTokenFromDB),
+//	    ilinksdk.WithOnTokenInvalid(func(ctx context.Context) {
+//	        db.DeleteToken(accountID)
+//	    }),
+//	)
+func WithOnTokenInvalid(callback func(ctx context.Context)) Option {
+	return func(c *Config) {
+		c.OnTokenInvalid = callback
 	}
 }

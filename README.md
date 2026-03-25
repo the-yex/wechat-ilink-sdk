@@ -49,7 +49,6 @@ package main
 
 import (
     "context"
-    "fmt"
     "log/slog"
     "os"
 
@@ -64,26 +63,31 @@ func main() {
     // Create token store for persistence (auto-login support)
     tokenStore, _ := login.NewFileTokenStore("")
 
-    // Create client
+    // Define QR code display callback
+    qrCallback := func(ctx context.Context, qr *login.QRCode) error {
+        login.PrintQRCodeWithTerm(qr)
+        return nil
+    }
+
+    // Create client with login callback configured
+    // Run() will automatically handle login if needed
     client, _ := ilinksdk.NewClient(
         ilinksdk.WithLogger(logger),
         ilinksdk.WithTokenStore(tokenStore),
+        ilinksdk.WithOnLogin(qrCallback), // Auto-login when Run() is called
     )
     defer client.Close()
 
-    // Login via QR code (SDK validates stored token first)
-    result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
-        // Display QR code for user to scan
-        login.PrintQRCodeWithTerm(qr)
-        return nil
+    // Set session expired callback (optional)
+    client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+        logger.Info("session expired, please re-scan QR code")
+        return client.Login(ctx, qrCallback)
     })
-    if err != nil {
-        logger.Error("login failed", "error", err)
-        os.Exit(1)
-    }
-    logger.Info("logged in", "account", result.AccountID)
 
-    // Run bot
+    // Just call Run() - SDK handles everything:
+    // 1. Auto-login if not logged in (using OnLogin callback)
+    // 2. Process messages
+    // 3. Re-login on session expiry (using OnSessionExpired callback)
     ctx := context.Background()
     client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
         // Auto-reply to text messages
@@ -99,21 +103,26 @@ func main() {
 
 ```
 wechat-ilink-sdk/
-├── client.go          # Main client (entry point)
-├── config.go          # Configuration
-├── options.go         # Option pattern
-├── errors.go          # Error definitions
-├── version.go         # Version info
-├── service/           # Service layer (Message, Media, Auth, Session)
-├── types/             # Request/Response types
-├── ilink/             # iLink protocol layer
-├── login/             # Login service & token storage
-├── media/             # CDN media handling
-├── middleware/        # Middleware system
-├── plugin/            # Plugin system
-├── event/             # Event system
-├── internal/          # Internal implementation
-└── examples/          # Example code
+├── client.go              # Main client (entry point)
+├── config.go              # Configuration
+├── options.go             # Option pattern
+├── errors.go              # Error definitions
+│
+├── types/                 # Core types (Message, Requests, etc.)
+├── ilink/                 # API client & type aliases
+├── login/                 # Login service & token storage
+├── media/                 # CDN media types
+├── plugin/                # Plugin interface
+├── middleware/            # Middleware interface
+├── event/                 # Event types
+│
+├── internal/              # Internal implementation (not exported)
+│   ├── service/           # Service implementations
+│   ├── contextmgr/        # Context token manager
+│   ├── crypto/            # Encryption utilities
+│   └── httpx/             # HTTP utilities
+│
+└── examples/              # Example code
 ```
 
 ## Configuration
@@ -132,27 +141,60 @@ client, err := ilinksdk.NewClient(
 
 ## Token Management
 
-### Auto-login
+### Default (Auto-managed)
 
-The SDK automatically handles token persistence:
-
-1. **First Run**: Display QR code → User scans → Token saved to store
-2. **Subsequent Runs**: SDK loads stored token → Validates with API → Skip QR code if valid
+SDK uses file storage by default, automatically handling token persistence:
 
 ```go
-// FileTokenStore saves tokens to ~/.wechat-ilink/tokens.json by default
-tokenStore, _ := login.NewFileTokenStore("")
+// Default: stored in ./.weixin/default.json
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithOnLogin(qrCallback),  // QR code display
+)
 
 // Or specify custom directory
-tokenStore, _ := login.NewFileTokenStore("/path/to/tokens")
-
-// Or use in-memory store (no persistence)
-tokenStore := login.NewMemoryTokenStore()
+tokenStore, _ := login.NewFileTokenStore("./my-bot")
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithOnLogin(qrCallback),
+)
 ```
 
-### Token Validation
+### Custom Storage (Advanced)
 
-The SDK validates stored tokens on startup using the `getConfig` API. If the token is expired or invalid, it automatically clears the stored token and prompts for QR code scan.
+If you want to manage tokens yourself (e.g., database, multi-account support), use hooks:
+
+```go
+client, _ := ilinksdk.NewClient(
+    // Called after successful login - save user info
+    ilinksdk.WithOnLoginSuccess(func(ctx context.Context, result *ilink.LoginResult) error {
+        // Save to database
+        db.SaveUser(result.AccountID, &User{
+            Token:   result.Token,
+            BaseURL: result.BaseURL,
+            UserID:  result.UserID,
+        })
+        return nil
+    }),
+
+    // Called when SDK needs to load token
+    ilinksdk.WithTokenProvider(func(ctx context.Context) (*login.TokenInfo, error) {
+        user := db.GetUser(accountID)
+        if user == nil {
+            return nil, nil  // Return nil to trigger login flow
+        }
+        return &login.TokenInfo{
+            Token:   user.Token,
+            BaseURL: user.BaseURL,
+            UserID:  user.UserID,
+        }, nil
+    }),
+
+    // Called when token becomes invalid
+    ilinksdk.WithOnTokenInvalid(func(ctx context.Context) {
+        db.DeleteToken(accountID)
+    }),
+)
+```
 
 ### Session Expiry Handling
 
@@ -288,6 +330,7 @@ See the [examples](./examples/) directory:
 | `qrcode-login` | Login with token storage |
 | `qrcode-login-with-image` | Full bot with auto-reply |
 | `auto-relogin` | Auto re-login on session expiry |
+| `sqlite-storage` | SQLite storage for user info |
 | `basic-bot` | Echo bot with middleware |
 | `plugins` | Plugin development examples |
 | `ai-assistant` | AI assistant integration pattern |

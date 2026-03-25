@@ -4,6 +4,7 @@ package login
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/skip2/go-qrcode"
@@ -39,6 +40,56 @@ type QRCode struct {
 // IsExpired checks if the QR code has exceeded its TTL (5 minutes).
 func (q *QRCode) IsExpired() bool {
 	return time.Since(q.StartedAt) > 5*time.Minute
+}
+
+// TerminalString returns a formatted string for terminal display.
+// It includes both the QR code image URL and an ASCII QR code for scanning.
+func (q *QRCode) TerminalString() string {
+	var sb strings.Builder
+
+	sb.WriteString("\n")
+	sb.WriteString("========================================\n")
+	sb.WriteString("     SCAN QR CODE TO LOGIN\n")
+	sb.WriteString("========================================\n")
+	sb.WriteString("\n")
+
+	// Display QR code image URL (primary method)
+	if q.ImageURL != "" {
+		sb.WriteString("【推荐】打开手机浏览器，访问以下链接：\n")
+		sb.WriteString("\n")
+		sb.WriteString("  " + q.ImageURL + "\n")
+		sb.WriteString("\n")
+		sb.WriteString("然后使用微信扫码登录\n")
+		sb.WriteString("\n")
+		sb.WriteString("----------------------------------------\n")
+		sb.WriteString("\n")
+	}
+
+	// Display terminal QR code
+	if q.ImageURL != "" {
+		sb.WriteString("或直接扫描终端中的二维码：\n")
+		sb.WriteString("\n")
+		sb.WriteString(q.generateQRCodeASCII())
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("请使用微信扫码并确认登录\n")
+	sb.WriteString("二维码将在 5 分钟后过期\n")
+	sb.WriteString("========================================\n")
+
+	return sb.String()
+}
+
+// generateQRCodeASCII generates an ASCII QR code string.
+func (q *QRCode) generateQRCodeASCII() string {
+	if q.ImageURL == "" {
+		return ""
+	}
+	qr, err := qrcode.New(q.ImageURL, qrcode.Medium)
+	if err != nil {
+		return fmt.Sprintf("Failed to generate QR code: %v\n", err)
+	}
+	return qr.ToSmallString(true)
 }
 
 // LoginFlow manages the QR code login process.
@@ -205,78 +256,8 @@ func LoginWithContext(ctx context.Context, client *ilink.Client, displayCallback
 	return flow.PollStatus(ctx)
 }
 
-// PrintQRCode prints the QR code for login.
-// It displays the QR code image URL for scanning.
-func PrintQRCode(qr *QRCode) {
-	fmt.Println()
-	fmt.Println("========================================")
-	fmt.Println("     SCAN QR CODE TO LOGIN")
-	fmt.Println("========================================")
-	fmt.Println()
-
-	// Display QR code image URL (primary method)
-	if qr.ImageURL != "" {
-		fmt.Println("请打开手机浏览器，访问以下链接查看二维码：")
-		fmt.Println()
-		fmt.Println("  " + qr.ImageURL)
-		fmt.Println()
-		fmt.Println("或使用微信扫描下方二维码：")
-		fmt.Println()
-	}
-
-	// Display QR code content as fallback
-	if qr.Content != "" {
-		printQRCode(qr.Content)
-		fmt.Println()
-	}
-
-	fmt.Println("请使用微信扫码并确认登录")
-	fmt.Println("二维码将在 5 分钟后过期")
-	fmt.Println("========================================")
-}
-
 // PrintQRCodeWithTerm displays the QR code with both URL and terminal ASCII QR code.
 // Users can either open the URL in browser or scan the terminal QR code.
 func PrintQRCodeWithTerm(qr *QRCode) {
-	fmt.Println()
-	fmt.Println("========================================")
-	fmt.Println("     SCAN QR CODE TO LOGIN")
-	fmt.Println("========================================")
-	fmt.Println()
-
-	// Display QR code image URL (primary method)
-	if qr.ImageURL != "" {
-		fmt.Println("【推荐】打开手机浏览器，访问以下链接：")
-		fmt.Println()
-		fmt.Println("  " + qr.ImageURL)
-		fmt.Println()
-		fmt.Println("然后使用微信扫码登录")
-		fmt.Println()
-		fmt.Println("----------------------------------------")
-		fmt.Println()
-	}
-
-	// Display terminal QR code for the Image URL (not the QRCode content)
-	// Users can scan this directly from terminal
-	if qr.ImageURL != "" {
-		fmt.Println("或直接扫描终端中的二维码：")
-		fmt.Println()
-		printQRCode(qr.ImageURL)
-		fmt.Println()
-	}
-
-	fmt.Println("请使用微信扫码并确认登录")
-	fmt.Println("二维码将在 5 分钟后过期")
-	fmt.Println("========================================")
-}
-
-// printQRCode prints a QR code to the terminal using ASCII characters.
-func printQRCode(content string) {
-	q, err := qrcode.New(content, qrcode.Medium)
-	if err != nil {
-		fmt.Printf("Failed to generate QR code: %v\n", err)
-		return
-	}
-	// Print using go-qrcode's ToString method
-	fmt.Println(q.ToSmallString(true))
+	fmt.Print(qr.TerminalString())
 }

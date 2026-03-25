@@ -33,3 +33,4 @@ go.work.sum
 .claude
 docs/openclaw-weixin
 .weixin
+*.db

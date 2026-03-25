@@ -11,11 +11,11 @@ import (
 	"github.com/the-yex/wechat-ilink-sdk/event"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
 	"github.com/the-yex/wechat-ilink-sdk/internal/contextmgr"
+	"github.com/the-yex/wechat-ilink-sdk/internal/service"
 	"github.com/the-yex/wechat-ilink-sdk/login"
 	"github.com/the-yex/wechat-ilink-sdk/media"
 	"github.com/the-yex/wechat-ilink-sdk/middleware"
 	"github.com/the-yex/wechat-ilink-sdk/plugin"
-	"github.com/the-yex/wechat-ilink-sdk/service"
 )
 
 // ContextTokenManager is an alias for contextmgr.ContextTokenManager
@@ -129,18 +129,21 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 	}
 
-	// Auto-load token if token store is configured
+	// Auto-load token - priority: TokenProvider > TokenStore
 	// This allows seamless re-authentication without QR code scan
-	if cfg.TokenStore != nil {
-		accounts, err := tokenStore.List()
-		if err == nil && len(accounts) > 0 {
-			// Load the first account's token
-			tokenInfo, err := tokenStore.Load(accounts[0])
-			if err == nil && tokenInfo != nil && tokenInfo.Token != "" {
-				// Trigger token update with stored user info
-				client.onTokenUpdate(tokenInfo.Token, tokenInfo.BaseURL, accounts[0], tokenInfo.UserID)
-				cfg.Logger.Debug("loaded stored token", "account", accounts[0])
-			}
+	if cfg.TokenProvider != nil {
+		// User provides their own token loading logic
+		tokenInfo, err := cfg.TokenProvider(context.Background())
+		if err == nil && tokenInfo != nil && tokenInfo.Token != "" {
+			client.onTokenUpdate(tokenInfo.Token, tokenInfo.BaseURL, login.DefaultAccountID, tokenInfo.UserID)
+			cfg.Logger.Debug("loaded token from provider")
+		}
+	} else if cfg.TokenStore != nil {
+		// Default: load from TokenStore
+		tokenInfo, err := tokenStore.Load(login.DefaultAccountID)
+		if err == nil && tokenInfo != nil && tokenInfo.Token != "" {
+			client.onTokenUpdate(tokenInfo.Token, tokenInfo.BaseURL, login.DefaultAccountID, tokenInfo.UserID)
+			cfg.Logger.Debug("loaded stored token")
 		}
 	}
 
@@ -180,8 +183,26 @@ func (c *Client) onTokenUpdate(token, baseURL, accountID, userID string) {
 	c.session = service.NewSessionService(c.apiClient)
 }
 
+// clearToken clears the stored token.
+// If using TokenProvider, calls OnTokenInvalid callback.
+// If using TokenStore, deletes from store.
+func (c *Client) clearToken(ctx context.Context) {
+	if c.config.TokenProvider != nil && c.config.OnTokenInvalid != nil {
+		// User is managing tokens themselves
+		c.config.OnTokenInvalid(ctx)
+	} else if c.tokenStore != nil {
+		_ = c.tokenStore.Delete(login.DefaultAccountID)
+	}
+	// Reset login state
+	c.config.Token = ""
+	c.currentUser = nil
+}
+
 // Run starts the message polling loop and processes messages with the given handler.
 // This is a blocking call. Use context cancellation to stop.
+//
+// If not already logged in and OnLogin callback is set, Run will automatically
+// trigger the login flow before starting the message loop.
 func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 	c.mu.Lock()
 	if c.running {
@@ -195,12 +216,18 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 		c.mu.Lock()
 		c.running = false
 		c.mu.Unlock()
-		// Dispatch disconnected event
-		c.events.Dispatch(ctx, &event.Event{
-			Type:    event.EventTypeDisconnected,
-			Context: ctx,
-		})
 	}()
+
+	// Auto-login if not already logged in
+	if !c.IsLoggedIn() {
+		if c.config.OnLogin == nil {
+			return fmt.Errorf("not logged in and no OnLogin callback configured; call Login() first or use WithOnLogin option")
+		}
+		c.config.Logger.Info("auto-login: not logged in, triggering login flow")
+		if _, err := c.Login(ctx, c.config.OnLogin); err != nil {
+			return fmt.Errorf("auto-login failed: %w", err)
+		}
+	}
 
 	// Initialize plugins
 	if err := c.plugins.Initialize(ctx); err != nil {
@@ -235,15 +262,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			c.config.Logger.Warn("session expired, triggering re-login callback")
 
 			// Clear stored token
-			if c.tokenStore != nil {
-				accounts, _ := c.tokenStore.List()
-				for _, accountID := range accounts {
-					_ = c.tokenStore.Delete(accountID)
-				}
-			}
-			// Reset login state
-			c.config.Token = ""
-			c.currentUser = nil
+			c.clearToken(ctx)
 
 			// Call the session expired callback if set
 			if c.config.OnSessionExpired != nil {
@@ -276,15 +295,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 				c.config.Logger.Warn("token expired, triggering re-login callback")
 
 				// Clear stored token
-				if c.tokenStore != nil {
-					accounts, _ := c.tokenStore.List()
-					for _, accountID := range accounts {
-						_ = c.tokenStore.Delete(accountID)
-					}
-				}
-				// Reset login state
-				c.config.Token = ""
-				c.currentUser = nil
+				c.clearToken(ctx)
 
 				// Call the session expired callback if set
 				if c.config.OnSessionExpired != nil {
@@ -414,24 +425,19 @@ func (c *Client) Login(ctx context.Context, displayCallback login.QRCodeCallback
 		c.config.Logger.Warn("stored token is invalid, will perform QR code login")
 	}
 
-	// Clear invalid token if present
-	if c.tokenStore != nil {
-		accounts, _ := c.tokenStore.List()
-		for _, accountID := range accounts {
-			_ = c.tokenStore.Delete(accountID)
-		}
-		if len(accounts) > 0 {
-			c.config.Logger.Debug("cleared expired token")
-		}
-	}
-
-	// Reset login state
-	c.config.Token = ""
-	c.currentUser = nil
+	// Clear invalid token
+	c.clearToken(ctx)
 
 	result, err := c.auth.Login(ctx, displayCallback)
 	if err != nil {
 		return nil, err
+	}
+
+	// Call OnLoginSuccess callback if set (for user to save login info)
+	if c.config.OnLoginSuccess != nil {
+		if err := c.config.OnLoginSuccess(ctx, result); err != nil {
+			c.config.Logger.Warn("OnLoginSuccess callback failed", "error", err)
+		}
 	}
 
 	// Dispatch login event
@@ -460,11 +466,6 @@ func (c *Client) SetToken(token, baseURL, accountID, userID string) {
 // LoadToken loads a stored token for an account.
 func (c *Client) LoadToken(accountID string) error {
 	return c.auth.LoadToken(accountID)
-}
-
-// ListAccounts lists all stored account IDs.
-func (c *Client) ListAccounts() ([]string, error) {
-	return c.auth.ListAccounts()
 }
 
 // --- SessionService delegation ---

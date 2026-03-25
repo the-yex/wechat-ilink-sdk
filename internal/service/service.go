@@ -65,9 +65,6 @@ type AuthService interface {
 	// LoadToken loads a stored token for an account.
 	LoadToken(accountID string) error
 
-	// ListAccounts lists all stored account IDs.
-	ListAccounts() ([]string, error)
-
 	// GetCurrentUser returns the current logged-in user info.
 	GetCurrentUser() *ilink.LoginResult
 }

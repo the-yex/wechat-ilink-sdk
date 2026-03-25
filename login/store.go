@@ -8,6 +8,9 @@ import (
 	"sync"
 )
 
+// DefaultAccountID is the default account ID for single-account mode.
+const DefaultAccountID = "default"
+
 // TokenStore defines the interface for token storage.
 type TokenStore interface {
 	// Save saves the token for an account.

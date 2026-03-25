@@ -16,6 +16,14 @@ import (
 // Return a LoginResult to continue with a new session, or an error to stop.
 type SessionExpiredCallback func(ctx context.Context) (*ilink.LoginResult, error)
 
+// LoginSuccessCallback is called after successful login.
+// Users can save the login result to their own storage.
+type LoginSuccessCallback func(ctx context.Context, result *ilink.LoginResult) error
+
+// TokenProvider is called when SDK needs token info.
+// Return stored token info, or nil if not available.
+type TokenProvider func(ctx context.Context) (*login.TokenInfo, error)
+
 // Config holds the SDK configuration.
 type Config struct {
 	// API configuration
@@ -37,13 +45,33 @@ type Config struct {
 	// Logging
 	Logger *slog.Logger
 
-	// Token storage (for login flow)
+	// Token storage (for auto-login) - default: FileTokenStore in ./.weixin/
+	// If you want to manage tokens yourself, use OnLoginSuccess and TokenProvider instead.
 	TokenStore login.TokenStore
+
+	// Login callback - called when QR code login is needed
+	// Required for Run() to work without prior Login() call
+	OnLogin login.QRCodeCallback
 
 	// Callback when session expires (optional)
 	// If set, this will be called when the session expires to allow re-login.
 	// Return nil to stop the Run loop, or a LoginResult to continue.
 	OnSessionExpired SessionExpiredCallback
+
+	// OnLoginSuccess is called after successful login.
+	// Use this to save login info to your own storage (database, cache, etc.)
+	// Example: save to database for multi-account support
+	OnLoginSuccess LoginSuccessCallback
+
+	// TokenProvider is called when SDK needs stored token info.
+	// Use this to load token from your own storage.
+	// Return nil if no token stored (will trigger login flow).
+	TokenProvider TokenProvider
+
+	// OnTokenInvalid is called when token becomes invalid (expired, session timeout, etc.)
+	// Use this to clear stored token from your own storage.
+	// Only called if TokenProvider is set (not for TokenStore).
+	OnTokenInvalid func(ctx context.Context)
 
 	// Extensions
 	Middleware []middleware.Middleware

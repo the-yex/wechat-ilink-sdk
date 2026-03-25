@@ -59,12 +59,15 @@ func (s *authService) Login(ctx context.Context, displayCallback login.QRCodeCal
 		return nil, err
 	}
 
+	// Use default account ID for single-account mode
+	accountID := login.DefaultAccountID
+
 	// Update token with full user info
-	s.SetToken(result.Token, result.BaseURL, result.AccountID, result.UserID)
+	s.SetToken(result.Token, result.BaseURL, accountID, result.UserID)
 
 	// Save token if store is available
-	if s.tokenStore != nil && result.AccountID != "" {
-		_ = s.tokenStore.Save(result.AccountID, &login.TokenInfo{
+	if s.tokenStore != nil {
+		_ = s.tokenStore.Save(accountID, &login.TokenInfo{
 			Token:   result.Token,
 			BaseURL: result.BaseURL,
 			UserID:  result.UserID,
@@ -72,6 +75,8 @@ func (s *authService) Login(ctx context.Context, displayCallback login.QRCodeCal
 		})
 	}
 
+	// Update result with correct account ID
+	result.AccountID = accountID
 	return result, nil
 }
 
@@ -103,14 +108,6 @@ func (s *authService) LoadToken(accountID string) error {
 	}
 	s.SetToken(token.Token, token.BaseURL, accountID, token.UserID)
 	return nil
-}
-
-// ListAccounts lists all stored account IDs.
-func (s *authService) ListAccounts() ([]string, error) {
-	if s.tokenStore == nil {
-		return nil, fmt.Errorf("no token store configured")
-	}
-	return s.tokenStore.List()
 }
 
 // GetCurrentUser returns the current logged-in user info.

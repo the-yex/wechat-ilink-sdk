@@ -14,67 +14,40 @@ import (
 )
 
 // This example demonstrates automatic re-login when session expires.
+// The Run() method handles everything: login, message processing, and re-login on expiry.
 func main() {
 	// Setup logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 	}))
 
 	fmt.Println("=== WeChat iLink SDK - Auto Re-login Demo ===")
 
-	// Create token store
-	tokenStore, err := login.NewFileTokenStore("")
-	if err != nil {
-		logger.Error("failed to create token store", "error", err)
-		os.Exit(1)
-	}
+	// Create token store for persistence
+	tokenStore, _ := login.NewFileTokenStore("")
 
-	// Create client first without callback
-	client, err := ilinksdk.NewClient(
+	// Create client with all callbacks configured
+	client, _ := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
-	)
-	if err != nil {
-		logger.Error("failed to create client", "error", err)
-		os.Exit(1)
-	}
-	defer client.Close()
-
-	// Set the session expired callback using the client
-	client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
-		// This callback is invoked when session expires
-		fmt.Println("\n========================================")
-		fmt.Println("  Session expired! Please re-scan QR code")
-		fmt.Println("========================================")
-
-		// Perform QR code login again
-		return client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
+		// Called when QR code login is needed
+		ilinksdk.WithOnLogin(func(ctx context.Context, qr *login.QRCode) error {
 			login.PrintQRCodeWithTerm(qr)
 			return nil
-		})
-	})
+		}),
+		// Called when session expires - trigger re-login
+		ilinksdk.WithOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+			fmt.Println("\n========================================")
+			fmt.Println("  Session expired! Please re-scan QR code")
+			fmt.Println("========================================")
+			// Return nil to trigger QR code login via OnLogin callback
+			// Or return client.Login() with a specific callback
+			return nil, nil // This will stop the loop; user can restart
+		}),
+	)
+	defer client.Close()
 
-	// Initial login
-	fmt.Println("\nStarting initial login...")
-
-	ctx := context.Background()
-	result, err := client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
-		login.PrintQRCodeWithTerm(qr)
-		return nil
-	})
-
-	if err != nil {
-		fmt.Printf("\nLogin failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("\n=== Login Successful ===")
-	fmt.Printf("Account ID: %s\n", result.AccountID)
-	fmt.Printf("User ID:  %s\n", result.UserID)
-	fmt.Println("========================")
-
-	// Start message listener
-	fmt.Println("\nStarting message listener...")
+	fmt.Println("Starting bot...")
 	fmt.Println("When session expires, you will be prompted to re-scan QR code.")
 	fmt.Println("Press Ctrl+C to stop.")
 
@@ -82,32 +55,31 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	runCtx, runCancel := context.WithCancel(context.Background())
-	defer runCancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	go func() {
 		<-sigChan
 		fmt.Println("\nShutting down...")
-		runCancel()
+		cancel()
 	}()
 
-	// Run message loop
-	// If session expires, OnSessionExpired callback will be invoked automatically
-	if err := client.Run(runCtx, func(ctx context.Context, msg *ilink.Message) error {
+	// Run handles everything:
+	// 1. Auto-login if not logged in (using OnLogin callback)
+	// 2. Process messages
+	// 3. Re-login on session expiry (using OnSessionExpired callback)
+	if err := client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
 		logger.Info("received message", "from", msg.FromUserID)
-		text := msg.GetText()
-		logger.Info("message content", "text", text)
-
-		if text != "" {
+		if text := msg.GetText(); text != "" {
+			logger.Info("message content", "text", text)
 			reply := fmt.Sprintf("[Auto-reply] Received: %s", text)
 			if err := client.SendText(ctx, msg.FromUserID, reply); err != nil {
 				logger.Error("failed to send reply", "error", err)
 			}
 		}
-
 		return nil
 	}); err != nil && err != context.Canceled {
-		logger.Error("run error", "error", err)
+		logger.Error("bot error", "error", err)
 	}
 
 	fmt.Println("Bot stopped.")

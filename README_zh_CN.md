@@ -63,26 +63,27 @@ func main() {
     // 创建 Token 存储器（支持自动登录）
     tokenStore, _ := login.NewFileTokenStore("")
 
-    // 创建客户端
+    // 定义二维码显示回调
+    qrCallback := func(ctx context.Context, qr *login.QRCode) error {
+        login.PrintQRCodeWithTerm(qr)
+        return nil
+    }
+
+    // 创建客户端（配置登录回调）
     client, _ := ilinksdk.NewClient(
         ilinksdk.WithLogger(logger),
         ilinksdk.WithTokenStore(tokenStore),
+        ilinksdk.WithOnLogin(qrCallback), // Run() 时自动登录
     )
     defer client.Close()
 
-    // 扫码登录（SDK 会先验证存储的 Token）
-    result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
-        // 显示二维码供用户扫描
-        login.PrintQRCodeWithTerm(qr)
-        return nil
+    // 设置会话过期回调（可选）
+    client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+        logger.Info("会话过期，请重新扫码")
+        return client.Login(ctx, qrCallback)
     })
-    if err != nil {
-        logger.Error("登录失败", "error", err)
-        os.Exit(1)
-    }
-    logger.Info("登录成功", "account", result.AccountID)
 
-    // 运行机器人
+    // 直接调用 Run() - SDK 自动处理登录和消息处理
     ctx := context.Background()
     client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
         // 自动回复文本消息
@@ -98,21 +99,26 @@ func main() {
 
 ```
 wechat-ilink-sdk/
-├── client.go          # 主客户端（入口）
-├── config.go          # 配置
-├── options.go         # 选项模式
-├── errors.go          # 错误定义
-├── version.go         # 版本信息
-├── service/           # 服务层（Message、Media、Auth、Session）
-├── types/             # 请求/响应类型
-├── ilink/             # iLink 协议层
-├── login/             # 登录服务和 Token 存储
-├── media/             # CDN 媒体处理
-├── middleware/        # 中间件系统
-├── plugin/            # 插件系统
-├── event/             # 事件系统
-├── internal/          # 内部实现
-└── examples/          # 示例代码
+├── client.go              # 主客户端（入口）
+├── config.go              # 配置
+├── options.go             # 选项模式
+├── errors.go              # 错误定义
+│
+├── types/                 # 核心类型（Message、Requests 等）
+├── ilink/                 # API 客户端 & 类型别名
+├── login/                 # 登录服务和 Token 存储
+├── media/                 # CDN 媒体类型
+├── plugin/                # 插件接口
+├── middleware/            # 中间件接口
+├── event/                 # 事件类型
+│
+├── internal/              # 内部实现（不对外暴露）
+│   ├── service/           # 服务层实现
+│   ├── contextmgr/        # 上下文 Token 管理器
+│   ├── crypto/            # 加密工具
+│   └── httpx/             # HTTP 工具
+│
+└── examples/              # 示例代码
 ```
 
 ## 配置选项
@@ -131,27 +137,60 @@ client, err := ilinksdk.NewClient(
 
 ## Token 管理
 
-### 自动登录
+### 默认方式（自动管理）
 
-SDK 自动处理 Token 持久化：
-
-1. **首次运行**：显示二维码 → 用户扫码 → Token 保存到存储
-2. **后续运行**：SDK 加载存储的 Token → 通过 API 验证 → 有效则跳过扫码
+SDK 默认使用文件存储，自动处理 Token 持久化：
 
 ```go
-// FileTokenStore 默认将 Token 保存到 ~/.wechat-ilink/tokens.json
-tokenStore, _ := login.NewFileTokenStore("")
+// 默认存储在 ./.weixin/default.json
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithOnLogin(qrCallback),  // 扫码显示
+)
 
-// 或指定自定义目录
-tokenStore, _ := login.NewFileTokenStore("/path/to/tokens")
-
-// 或使用内存存储（不持久化）
-tokenStore := login.NewMemoryTokenStore()
+// 或指定存储目录
+tokenStore, _ := login.NewFileTokenStore("./my-bot")
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithOnLogin(qrCallback),
+)
 ```
 
-### Token 验证
+### 自定义存储（高级）
 
-SDK 在启动时通过 `getConfig` API 验证存储的 Token。如果 Token 过期或无效，会自动清除存储的 Token 并提示重新扫码。
+如果需要自己管理 Token（如存数据库、支持多账号等），使用回调钩子：
+
+```go
+client, _ := ilinksdk.NewClient(
+    // 登录成功时保存用户信息
+    ilinksdk.WithOnLoginSuccess(func(ctx context.Context, result *ilink.LoginResult) error {
+        // 保存到数据库
+        db.SaveUser(result.AccountID, &User{
+            Token:   result.Token,
+            BaseURL: result.BaseURL,
+            UserID:  result.UserID,
+        })
+        return nil
+    }),
+
+    // 需要加载 Token 时调用
+    ilinksdk.WithTokenProvider(func(ctx context.Context) (*login.TokenInfo, error) {
+        user := db.GetUser(accountID)
+        if user == nil {
+            return nil, nil  // 返回 nil 触发登录流程
+        }
+        return &login.TokenInfo{
+            Token:   user.Token,
+            BaseURL: user.BaseURL,
+            UserID:  user.UserID,
+        }, nil
+    }),
+
+    // Token 失效时清除
+    ilinksdk.WithOnTokenInvalid(func(ctx context.Context) {
+        db.DeleteToken(accountID)
+    }),
+)
+```
 
 ### 会话过期处理
 
@@ -287,6 +326,7 @@ if errors.Is(err, ilinksdk.ErrContextTokenRequired) {
 | `qrcode-login` | 登录 + Token 存储 |
 | `qrcode-login-with-image` | 完整机器人 + 自动回复 |
 | `auto-relogin` | 会话过期自动重登录 |
+| `sqlite-storage` | SQLite 存储用户信息 |
 | `basic-bot` | Echo 机器人 + 中间件 |
 | `plugins` | 插件开发示例 |
 | `ai-assistant` | AI 助手集成模式 |
