@@ -206,7 +206,7 @@ func main() {
 		}
 		return client.SendText(ctx, msg.FromUserID, "收到文件(无法下载)")
 	})
-	
+
 	// Run the bot (no need to pass handler, OnText etc. are used)
 	fmt.Println("启动机器人...")
 	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {
