@@ -133,32 +133,64 @@ client.SendTyping(ctx, toUserID, false) // 停止输入
 
 ## 接收消息
 
+### 方式一：使用 MessageRouter（推荐）
+
+按消息类型分开处理，代码更清晰：
+
+```go
+router := ilinksdk.NewMessageRouter()
+
+router.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    fmt.Printf("收到文本: %s\n", text)
+    return client.SendText(ctx, msg.FromUserID, "收到: "+text)
+})
+
+router.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
+    fmt.Printf("收到图片\n")
+    // 下载并回复图片
+    data, _ := client.DownloadMedia(ctx, &media.DownloadRequest{
+        EncryptQueryParam: item.Media.EncryptQueryParam,
+        AESKey:            item.Media.AESKey,
+    })
+    return client.SendImage(ctx, msg.FromUserID, data)
+})
+
+router.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
+    fmt.Printf("收到视频\n")
+    return nil
+})
+
+router.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
+    fmt.Printf("收到语音: %s\n", item.Text)
+    return nil
+})
+
+router.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
+    fmt.Printf("收到文件: %s\n", item.FileName)
+    return nil
+})
+
+// 运行机器人
+client.Run(ctx, router.Handler())
+```
+
+### 方式二：统一处理器
+
+适合简单场景：
+
 ```go
 client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
-    // 判断消息类型
     if !msg.IsFromUser() {
         return nil // 忽略非用户消息
     }
 
-    // 处理文本消息
     if text := msg.GetText(); text != "" {
-        fmt.Printf("收到文本: %s\n", text)
+        return client.SendText(ctx, msg.FromUserID, "收到: "+text)
     }
 
-    // 处理图片消息
     if item := msg.GetFirstMediaItem(); item != nil {
-        switch item.Type {
-        case types.MessageItemTypeImage:
-            // 下载图片
-            data, _ := client.DownloadMedia(ctx, &media.DownloadRequest{
-                EncryptQueryParam: item.ImageItem.Media.EncryptQueryParam,
-                AESKey:            item.ImageItem.Media.AESKey,
-            })
-            // 回复图片
-            client.SendImage(ctx, msg.FromUserID, data)
-        }
+        // 处理媒体消息...
     }
-
     return nil
 })
 ```

@@ -135,32 +135,64 @@ client.SendTyping(ctx, toUserID, false) // Stop typing
 
 ## Receiving Messages
 
+### Option 1: Using MessageRouter (Recommended)
+
+Handle different message types separately for cleaner code:
+
+```go
+router := ilinksdk.NewMessageRouter()
+
+router.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    fmt.Printf("Received text: %s\n", text)
+    return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
+})
+
+router.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
+    fmt.Printf("Received image\n")
+    // Download and reply with image
+    data, _ := client.DownloadMedia(ctx, &media.DownloadRequest{
+        EncryptQueryParam: item.Media.EncryptQueryParam,
+        AESKey:            item.Media.AESKey,
+    })
+    return client.SendImage(ctx, msg.FromUserID, data)
+})
+
+router.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
+    fmt.Printf("Received video\n")
+    return nil
+})
+
+router.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
+    fmt.Printf("Received voice: %s\n", item.Text)
+    return nil
+})
+
+router.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
+    fmt.Printf("Received file: %s\n", item.FileName)
+    return nil
+})
+
+// Run the bot
+client.Run(ctx, router.Handler())
+```
+
+### Option 2: Unified Handler
+
+Suitable for simple scenarios:
+
 ```go
 client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
-    // Check message type
     if !msg.IsFromUser() {
         return nil // Ignore non-user messages
     }
 
-    // Handle text message
     if text := msg.GetText(); text != "" {
-        fmt.Printf("Received text: %s\n", text)
+        return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
     }
 
-    // Handle image message
     if item := msg.GetFirstMediaItem(); item != nil {
-        switch item.Type {
-        case types.MessageItemTypeImage:
-            // Download image
-            data, _ := client.DownloadMedia(ctx, &media.DownloadRequest{
-                EncryptQueryParam: item.ImageItem.Media.EncryptQueryParam,
-                AESKey:            item.ImageItem.Media.AESKey,
-            })
-            // Reply with image
-            client.SendImage(ctx, msg.FromUserID, data)
-        }
+        // Handle media messages...
     }
-
     return nil
 })
 ```
