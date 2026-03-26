@@ -606,7 +606,20 @@ func (c *Client) LoginSimple(ctx context.Context, displayCallback func(qr *login
 	})
 }
 
+// RestoreToken restores a single-account session from stored token info.
+func (c *Client) RestoreToken(token *login.TokenInfo) error {
+	if err := c.ensureOpen("restore token"); err != nil {
+		return err
+	}
+	if token == nil || token.Token == "" {
+		return wrapError("restore token", ErrTokenRequired, nil)
+	}
+	c.auth.SetToken(token.Token, token.BaseURL, login.DefaultAccountID, token.UserID)
+	return nil
+}
+
 // SetToken sets the authentication token.
+// Deprecated: SDK runtime is single-account. Prefer RestoreToken, Login, or TokenProvider.
 func (c *Client) SetToken(token, baseURL, accountID, userID string) {
 	if c.closed.Load() {
 		return
@@ -614,7 +627,17 @@ func (c *Client) SetToken(token, baseURL, accountID, userID string) {
 	c.auth.SetToken(token, baseURL, accountID, userID)
 }
 
+// LoadDefaultToken loads the stored token used by the SDK's single-account runtime.
+func (c *Client) LoadDefaultToken() error {
+	if err := c.ensureOpen("load default token"); err != nil {
+		return err
+	}
+	return wrapError("load default token", c.auth.LoadToken(login.DefaultAccountID), nil)
+}
+
 // LoadToken loads a stored token for an account.
+// Deprecated: SDK runtime is single-account. Prefer LoadDefaultToken unless you
+// are bridging from legacy multi-account storage.
 func (c *Client) LoadToken(accountID string) error {
 	if err := c.ensureOpen("load token"); err != nil {
 		return err

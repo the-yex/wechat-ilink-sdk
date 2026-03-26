@@ -323,3 +323,49 @@ func TestClose_WaitsForAsyncEventHandlers(t *testing.T) {
 
 	require.ErrorIs(t, <-runErr, context.Canceled)
 }
+
+func TestRestoreToken_UsesSingleAccountRuntime(t *testing.T) {
+	client, err := NewClient()
+	require.NoError(t, err)
+
+	err = client.RestoreToken(&login.TokenInfo{
+		Token:   "stored-token",
+		BaseURL: "https://api.example.com",
+		UserID:  "user-1",
+	})
+	require.NoError(t, err)
+
+	user := client.CurrentUser()
+	require.NotNil(t, user)
+	assert.True(t, client.IsLoggedIn())
+	assert.Equal(t, login.DefaultAccountID, user.AccountID)
+	assert.Equal(t, "user-1", user.UserID)
+	assert.Equal(t, "https://api.example.com", user.BaseURL)
+}
+
+func TestRestoreToken_RejectsEmptyToken(t *testing.T) {
+	client, err := NewClient()
+	require.NoError(t, err)
+
+	err = client.RestoreToken(&login.TokenInfo{})
+	require.ErrorIs(t, err, ErrTokenRequired)
+}
+
+func TestLoadDefaultToken_LoadsSingleAccountStore(t *testing.T) {
+	store := login.NewMemoryTokenStore()
+	client, err := NewClient(WithTokenStore(store))
+	require.NoError(t, err)
+
+	require.NoError(t, login.SaveDefaultToken(store, &login.TokenInfo{
+		Token:   "stored-token",
+		BaseURL: "https://api.example.com",
+		UserID:  "user-1",
+	}))
+
+	require.NoError(t, client.LoadDefaultToken())
+
+	user := client.CurrentUser()
+	require.NotNil(t, user)
+	assert.Equal(t, login.DefaultAccountID, user.AccountID)
+	assert.Equal(t, "user-1", user.UserID)
+}

@@ -33,6 +33,30 @@ type TokenInfo struct {
 	SavedAt string `json:"saved_at,omitempty"`
 }
 
+// SaveDefaultToken saves a token using the SDK's default single-account ID.
+func SaveDefaultToken(store TokenStore, token *TokenInfo) error {
+	if store == nil {
+		return ErrNilTokenStore
+	}
+	return store.Save(DefaultAccountID, token)
+}
+
+// LoadDefaultToken loads the token stored under the SDK's default single-account ID.
+func LoadDefaultToken(store TokenStore) (*TokenInfo, error) {
+	if store == nil {
+		return nil, ErrNilTokenStore
+	}
+	return store.Load(DefaultAccountID)
+}
+
+// DeleteDefaultToken removes the token stored under the SDK's default single-account ID.
+func DeleteDefaultToken(store TokenStore) error {
+	if store == nil {
+		return ErrNilTokenStore
+	}
+	return store.Delete(DefaultAccountID)
+}
+
 // FileTokenStore implements TokenStore using file system.
 type FileTokenStore struct {
 	baseDir string

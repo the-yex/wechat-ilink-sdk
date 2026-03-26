@@ -131,3 +131,34 @@ func TestFileTokenStore_InvalidJSON(t *testing.T) {
 	_, err = store.Load("invalid")
 	require.Error(t, err)
 }
+
+func TestDefaultTokenHelpers(t *testing.T) {
+	store := NewMemoryTokenStore()
+	token := &TokenInfo{
+		Token:   "test-token",
+		BaseURL: "https://example.com",
+		UserID:  "user123",
+	}
+
+	require.NoError(t, SaveDefaultToken(store, token))
+
+	loaded, err := LoadDefaultToken(store)
+	require.NoError(t, err)
+	assert.Equal(t, token, loaded)
+
+	require.NoError(t, DeleteDefaultToken(store))
+
+	loaded, err = LoadDefaultToken(store)
+	require.NoError(t, err)
+	assert.Nil(t, loaded)
+}
+
+func TestDefaultTokenHelpers_RejectNilStore(t *testing.T) {
+	require.ErrorIs(t, SaveDefaultToken(nil, &TokenInfo{Token: "test-token"}), ErrNilTokenStore)
+
+	loaded, err := LoadDefaultToken(nil)
+	require.ErrorIs(t, err, ErrNilTokenStore)
+	assert.Nil(t, loaded)
+
+	require.ErrorIs(t, DeleteDefaultToken(nil), ErrNilTokenStore)
+}
