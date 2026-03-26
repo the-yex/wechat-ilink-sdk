@@ -105,7 +105,7 @@ func main() {
 
 		return client.SendText(ctx, msg.FromUserID, "收到: "+text)
 	})
-	
+
 	// Run the bot
 	fmt.Println("启动机器人...")
 	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {

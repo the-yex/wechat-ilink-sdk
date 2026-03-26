@@ -7,6 +7,16 @@
 
 基于 iLink 协议的专业、高度可扩展的微信机器人 Go SDK。
 
+## 关于 iLink 协议
+
+> **2026 年，腾讯通过 OpenClaw 框架正式开放了微信个人账号的 Bot API（iLink 协议）。这是微信首次提供合法的个人 Bot 开发接口，使用标准 HTTP/JSON 协议，接入域名为 `ilinkai.weixin.qq.com`。**
+
+**重要说明：**
+- ✅ **官方授权** - iLink 是微信官方提供的合法接口，非逆向或破解
+- ✅ **安全合规** - 使用官方 API，不会触发封号风险
+- ✅ **稳定可靠** - 官方维护，协议稳定，长期支持
+- ✅ **标准协议** - HTTP/JSON，易于集成和调试
+
 ## 功能特性
 
 - **扫码登录** - 扫描二维码认证，Token 本地持久化存储
@@ -130,6 +140,15 @@ client.SendFile(ctx, toUserID, "document.pdf", fileData)
 client.SendTyping(ctx, toUserID, true)  // 开始输入
 client.SendTyping(ctx, toUserID, false) // 停止输入
 ```
+
+> **⚠️ 消息发送限制**
+>
+> 由于 iLink 协议的设计，SDK **只能回复消息，无法主动发起对话**。
+>
+> - ✅ **被动回复**：用户先发消息，SDK 存储会话凭证（Context Token），然后回复
+> - ❌ **主动发送**：无法给从未发过消息的用户发送消息（无 Context Token）
+>
+> 程序重启后 Context Token 会丢失，用户需要重新发送一条消息才能恢复回复能力。
 
 ## 接收消息
 

@@ -7,6 +7,16 @@
 
 A professional, highly extensible Go SDK for building WeChat bot applications based on the iLink protocol.
 
+## About iLink Protocol
+
+> **In 2026, Tencent officially released the WeChat personal account Bot API (iLink protocol) through the OpenClaw framework. This is WeChat's first official legal interface for personal Bot development, using standard HTTP/JSON protocol with the endpoint `ilinkai.weixin.qq.com`.**
+
+**Key Points:**
+- ✅ **Official Authorization** - iLink is a legitimate official API, not reverse-engineered
+- ✅ **Safe & Compliant** - Using official API, no risk of account suspension
+- ✅ **Stable & Reliable** - Officially maintained, stable protocol with long-term support
+- ✅ **Standard Protocol** - HTTP/JSON, easy to integrate and debug
+
 ## Features
 
 - **QR Code Login** - Scan QR code to authenticate, tokens persisted locally
@@ -132,6 +142,15 @@ client.SendFile(ctx, toUserID, "document.pdf", fileData)
 client.SendTyping(ctx, toUserID, true)  // Start typing
 client.SendTyping(ctx, toUserID, false) // Stop typing
 ```
+
+> **⚠️ Message Sending Limitation**
+>
+> Due to the iLink protocol design, the SDK **can only reply to messages, not initiate conversations**.
+>
+> - ✅ **Passive Reply**: User sends a message first, SDK stores session credential (Context Token), then replies
+> - ❌ **Active Send**: Cannot send messages to users who have never messaged you (no Context Token)
+>
+> After program restart, Context Tokens are lost. Users need to send a new message to restore reply capability.
 
 ## Receiving Messages
 
