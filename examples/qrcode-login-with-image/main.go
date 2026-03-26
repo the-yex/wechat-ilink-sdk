@@ -41,12 +41,6 @@ func main() {
 	)
 	defer client.Close()
 
-	// Set session expired callback (needs client reference, so set after creation)
-	client.SetOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
-		fmt.Println("\n=== Session Expired - Please Scan QR Code ===")
-		return client.Login(ctx, qrCallback)
-	})
-
 	fmt.Println("Starting bot... (Scan QR code if prompted)")
 	fmt.Println("Press Ctrl+C to stop.")
 

@@ -1,0 +1,6 @@
+./auth.go
+./media.go
+./message.go
+./service.go
+./session.go
+./message_test.go

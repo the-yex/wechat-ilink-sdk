@@ -72,16 +72,16 @@ func newMockContextTokenService() *mockContextTokenService {
 	return &mockContextTokenService{tokens: make(map[string]string)}
 }
 
-func (m *mockContextTokenService) Get(accountID, userID string) string {
-	return m.tokens[accountID+":"+userID]
+func (m *mockContextTokenService) Get(userID string) string {
+	return m.tokens[userID]
 }
 
-func (m *mockContextTokenService) Set(accountID, userID, token string) {
-	m.tokens[accountID+":"+userID] = token
+func (m *mockContextTokenService) Set(userID, token string) {
+	m.tokens[userID] = token
 }
 
-func (m *mockContextTokenService) Delete(accountID, userID string) {
-	delete(m.tokens, accountID+":"+userID)
+func (m *mockContextTokenService) Delete(userID string) {
+	delete(m.tokens, userID)
 }
 
 func TestMessageService_SendText(t *testing.T) {
@@ -122,7 +122,7 @@ func TestMessageService_SendText(t *testing.T) {
 			mockTokens := newMockContextTokenService()
 
 			if tt.contextToken != "" {
-				mockTokens.Set("", tt.toUserID, tt.contextToken)
+				mockTokens.Set(tt.toUserID, tt.contextToken)
 			}
 
 			svc := NewMessageService(
@@ -187,7 +187,7 @@ func TestMessageService_SendImage(t *testing.T) {
 			mockTokens := newMockContextTokenService()
 
 			if tt.contextToken != "" {
-				mockTokens.Set("", tt.toUserID, tt.contextToken)
+				mockTokens.Set(tt.toUserID, tt.contextToken)
 			}
 
 			svc := NewMessageService(
