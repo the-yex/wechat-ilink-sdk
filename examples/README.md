@@ -12,6 +12,7 @@
 | [auto-relogin](./auto-relogin) | 进阶 | 会话过期自动重登录 |
 | [basic-bot](./basic-bot) | 进阶 | Echo 机器人 + 中间件 |
 | [sqlite-storage](./sqlite-storage) | 进阶 | SQLite 存储 Token |
+| [event-demo](./event-demo) | 进阶 | 事件系统使用示例 |
 | [plugins](./plugins) | 高级 | 插件开发示例 |
 | [ai-assistant](./ai-assistant) | 高级 | AI 助手集成模式 |
 
@@ -97,7 +98,30 @@ go run ./examples/sqlite-storage/main.go
 - SQLite 数据库持久化
 - 完整的消息处理示例
 
-### 7. plugins - 插件开发
+### 7. event-demo - 事件系统
+
+**适合：** 学习事件订阅和生命周期管理
+
+```bash
+go run ./examples/event-demo/main.go
+```
+
+**功能：**
+- 订阅登录成功事件
+- 订阅会话过期事件
+- 订阅连接/断开事件
+- 订阅错误事件
+
+**事件用途：**
+| 事件 | 用途 |
+|------|------|
+| `EventTypeLogin` | 记录用户信息、初始化业务状态 |
+| `EventTypeSessionExpired` | 清理缓存、发送告警通知 |
+| `EventTypeConnected` | 更新服务状态为"在线" |
+| `EventTypeDisconnected` | 更新服务状态为"离线" |
+| `EventTypeError` | 统一错误处理、监控上报 |
+
+### 8. plugins - 插件开发
 
 **适合：** 学习插件系统开发
 
@@ -112,7 +136,7 @@ go run ./examples/plugins/main.go
 
 详细文档：[plugins/README.md](./plugins/README.md)
 
-### 8. ai-assistant - AI 助手
+### 9. ai-assistant - AI 助手
 
 **适合：** 集成 AI 服务
 

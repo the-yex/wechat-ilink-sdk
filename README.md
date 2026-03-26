@@ -319,9 +319,54 @@ func (p *MyPlugin) OnMessage(ctx context.Context, msg *ilink.Message) error {
     return nil
 }
 func (p *MyPlugin) OnError(ctx context.Context, err error) {}
+```
 
-// Register plugin
-client.UsePlugin(context.Background(), &MyPlugin{})
+### Registering Plugins
+
+Both methods work the same way, executing plugins in registration order:
+
+**Option 1: Batch Registration (Recommended)**
+
+```go
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(plugin1, plugin2, plugin3),
+)
+```
+
+**Option 2: Individual Registration**
+
+```go
+client.UsePlugin(context.Background(), plugin1)
+client.UsePlugin(context.Background(), plugin2)
+```
+
+### Built-in Plugins
+
+SDK provides the following built-in plugins:
+
+#### LogoutPlugin - Logout Command Plugin
+
+Users can logout by sending `/exit` command. SDK clears the stored token and automatically shows a QR code for re-login:
+
+```go
+logoutPlugin := plugin.NewLogoutPlugin(func(ctx context.Context) error {
+    // Optional: callback after exit
+    log.Println("User logged out, waiting for re-scan")
+    return nil
+})
+
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(logoutPlugin),
+)
+```
+
+User interaction flow:
+```
+User: /exit
+Bot:  Are you sure you want to exit? Send /exit again to confirm.
+User: /exit
+Bot:  Exiting, please scan QR code to login again...
+[SDK automatically shows QR code for re-login]
 ```
 
 See [examples/plugins/README.md](./examples/plugins/README.md) for detailed plugin development guide.
@@ -338,6 +383,7 @@ See the [examples](./examples/) directory:
 | `auto-relogin` | Auto re-login on session expiry |
 | `sqlite-storage` | SQLite storage for user info |
 | `basic-bot` | Echo bot with middleware |
+| `event-demo` | Event system usage example |
 | `plugins` | Plugin development examples |
 | `ai-assistant` | AI assistant integration pattern |
 

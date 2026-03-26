@@ -317,9 +317,54 @@ func (p *MyPlugin) OnMessage(ctx context.Context, msg *ilink.Message) error {
     return nil
 }
 func (p *MyPlugin) OnError(ctx context.Context, err error) {}
+```
 
-// 注册插件
-client.UsePlugin(context.Background(), &MyPlugin{})
+### 注册插件
+
+两种方式效果相同，按注册顺序执行：
+
+**方式一：批量注册（推荐）**
+
+```go
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(plugin1, plugin2, plugin3),
+)
+```
+
+**方式二：单个注册**
+
+```go
+client.UsePlugin(context.Background(), plugin1)
+client.UsePlugin(context.Background(), plugin2)
+```
+
+### 内置插件
+
+SDK 提供以下内置插件：
+
+#### LogoutPlugin - 退出登录插件
+
+用户发送 `/exit` 命令即可退出登录，SDK 会清除本地 Token 并自动弹出二维码让用户重新扫码登录：
+
+```go
+logoutPlugin := plugin.NewLogoutPlugin(func(ctx context.Context) error {
+    // 可选：退出后的回调处理
+    log.Println("用户已退出登录，等待重新扫码")
+    return nil
+})
+
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(logoutPlugin),
+)
+```
+
+用户交互流程：
+```
+用户: /exit
+Bot:  确定要退出吗？再次发送 /exit 确认退出。
+用户: /exit
+Bot:  正在退出，请重新扫码登录...
+[SDK 自动弹出二维码等待扫码]
 ```
 
 详细插件开发指南请参考 [examples/plugins/README.md](./examples/plugins/README.md)。
@@ -336,6 +381,7 @@ client.UsePlugin(context.Background(), &MyPlugin{})
 | `auto-relogin` | 会话过期自动重登录 |
 | `sqlite-storage` | SQLite 存储用户信息 |
 | `basic-bot` | Echo 机器人 + 中间件 |
+| `event-demo` | 事件系统使用示例 |
 | `plugins` | 插件开发示例 |
 | `ai-assistant` | AI 助手集成模式 |
 

@@ -35,4 +35,7 @@ type SDK interface {
 	UploadMedia(ctx context.Context, req *media.UploadRequest) (*media.UploadResult, error)
 	// DownloadMedia downloads and decrypts a media file.
 	DownloadMedia(ctx context.Context, req *media.DownloadRequest) ([]byte, error)
+	// Logout clears the stored token and triggers re-login.
+	// After calling this, the user will need to scan QR code again.
+	Logout(ctx context.Context) error
 }

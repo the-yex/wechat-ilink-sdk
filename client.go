@@ -539,6 +539,22 @@ func (c *Client) LoadToken(accountID string) error {
 	return c.auth.LoadToken(accountID)
 }
 
+// Logout clears the stored token and triggers re-login.
+// After calling this, the SDK will pause the current session and
+// trigger the OnSessionExpired callback, which by default shows a QR code for re-login.
+func (c *Client) Logout(ctx context.Context) error {
+	// Clear stored token
+	c.clearToken(ctx)
+
+	// Reset session guard first
+	c.apiClient.ResetSession()
+
+	// Pause session to trigger re-login flow in Run()
+	c.apiClient.PauseSession()
+
+	return nil
+}
+
 // --- SessionService delegation ---
 
 // IsPaused returns true if the session is paused.

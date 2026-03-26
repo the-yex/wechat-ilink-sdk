@@ -328,6 +328,7 @@ func main() {
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
+		ilinksdk.WithPlugins(loggerPlugin, commandPlugin, autoReplyPlugin),
 	)
 	if err != nil {
 		logger.Error("创建客户端失败", "error", err)
@@ -335,16 +336,16 @@ func main() {
 	}
 	defer client.Close()
 
-	// 注册插件到客户端（在 Run() 之前）
-	if err := client.UsePlugin(context.Background(), loggerPlugin); err != nil {
-		logger.Error("注册日志插件失败", "error", err)
-	}
-	if err := client.UsePlugin(context.Background(), commandPlugin); err != nil {
-		logger.Error("注册命令插件失败", "error", err)
-	}
-	if err := client.UsePlugin(context.Background(), autoReplyPlugin); err != nil {
-		logger.Error("注册自动回复插件失败", "error", err)
-	}
+	//// 注册插件到客户端（在 Run() 之前）
+	//if err := client.UsePlugin(context.Background(), loggerPlugin); err != nil {
+	//	logger.Error("注册日志插件失败", "error", err)
+	//}
+	//if err := client.UsePlugin(context.Background(), commandPlugin); err != nil {
+	//	logger.Error("注册命令插件失败", "error", err)
+	//}
+	//if err := client.UsePlugin(context.Background(), autoReplyPlugin); err != nil {
+	//	logger.Error("注册自动回复插件失败", "error", err)
+	//}
 
 	fmt.Println("\n已注册以下插件:")
 	fmt.Println("  - logger: 消息日志记录")

@@ -236,6 +236,12 @@ func (c *Client) ResetSession() {
 	c.session.Reset()
 }
 
+// PauseSession pauses the session to trigger re-login flow.
+// This is used by Logout to force the Run loop to trigger OnSessionExpired callback.
+func (c *Client) PauseSession() {
+	c.session.Pause()
+}
+
 // GetBotQRCode retrieves a QR code for bot login.
 func (c *Client) GetBotQRCode(ctx context.Context, req *GetBotQRCodeRequest) (*GetBotQRCodeResponse, error) {
 	// Build URL with query parameters
