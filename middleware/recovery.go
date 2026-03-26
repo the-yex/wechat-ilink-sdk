@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime/debug"
 
@@ -34,5 +35,5 @@ type PanicError struct {
 }
 
 func (e *PanicError) Error() string {
-	return "panic: " + e.Value.(string)
+	return fmt.Sprintf("panic: %v", e.Value)
 }

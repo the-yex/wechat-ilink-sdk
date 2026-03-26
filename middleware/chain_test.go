@@ -173,6 +173,19 @@ func TestRecovery(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "panic")
 	})
+
+	t.Run("non-string panic recovered", func(t *testing.T) {
+		handler := func(ctx context.Context, req *ilink.SendMessageRequest) error {
+			panic(123)
+		}
+
+		recoveryMiddleware := Recovery(logger)
+		wrapped := recoveryMiddleware(handler)
+		err := wrapped(context.Background(), &ilink.SendMessageRequest{})
+
+		require.Error(t, err)
+		assert.Equal(t, "panic: 123", err.Error())
+	})
 }
 
 func TestDefaultRetryConfig(t *testing.T) {
@@ -182,6 +195,52 @@ func TestDefaultRetryConfig(t *testing.T) {
 	assert.Equal(t, 1*time.Second, config.WaitMin)
 	assert.Equal(t, 5*time.Second, config.WaitMax)
 	assert.NotNil(t, config.Retryable)
+}
+
+func TestDefaultRateLimitConfig(t *testing.T) {
+	config := DefaultRateLimitConfig()
+
+	assert.Equal(t, 5, config.MessagesPerSecond)
+	assert.Equal(t, 1, config.Burst)
+}
+
+func TestRateLimit(t *testing.T) {
+	t.Run("throttles sequential calls", func(t *testing.T) {
+		handler := func(ctx context.Context, req *ilink.SendMessageRequest) error {
+			return nil
+		}
+
+		wrapped := RateLimit(RateLimitConfig{
+			MessagesPerSecond: 50,
+			Burst:             1,
+		})(handler)
+
+		start := time.Now()
+		require.NoError(t, wrapped(context.Background(), &ilink.SendMessageRequest{}))
+		require.NoError(t, wrapped(context.Background(), &ilink.SendMessageRequest{}))
+
+		assert.GreaterOrEqual(t, time.Since(start), 18*time.Millisecond)
+	})
+
+	t.Run("respects canceled context", func(t *testing.T) {
+		handler := func(ctx context.Context, req *ilink.SendMessageRequest) error {
+			return nil
+		}
+
+		wrapped := RateLimit(RateLimitConfig{
+			MessagesPerSecond: 1,
+			Burst:             1,
+		})(handler)
+
+		require.NoError(t, wrapped(context.Background(), &ilink.SendMessageRequest{}))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := wrapped(ctx, &ilink.SendMessageRequest{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
 }
 
 func TestIsRetryableError(t *testing.T) {

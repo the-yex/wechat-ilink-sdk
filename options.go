@@ -61,6 +61,17 @@ func WithRetry(maxRetries int, waitMin, waitMax time.Duration) Option {
 		c.MaxRetries = maxRetries
 		c.RetryWaitMin = waitMin
 		c.RetryWaitMax = waitMax
+		c.autoRetry = true
+	}
+}
+
+// WithRateLimit applies an outbound send rate limit to message sends performed by the SDK.
+// The limiter is enforced before each send attempt, including retries.
+func WithRateLimit(messagesPerSecond, burst int) Option {
+	return func(c *Config) {
+		c.RateLimitMessagesPerSecond = messagesPerSecond
+		c.RateLimitBurst = burst
+		c.autoRateLimit = true
 	}
 }
 

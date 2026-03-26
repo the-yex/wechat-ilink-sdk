@@ -273,10 +273,11 @@ client.SendText(ctx, "some_user_id", "Hello")  // Returns ErrContextTokenRequire
 client, _ := ilinksdk.NewClient(
     ilinksdk.WithLogger(logger),
     ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+    ilinksdk.WithRateLimit(5, 1),
     ilinksdk.WithMiddleware(
         middleware.Logging(logger),
         middleware.Recovery(logger),
-        middleware.Retry(middleware.DefaultRetryConfig()),
     ),
 )
 ```
@@ -299,9 +300,10 @@ Implement the `TokenStore` interface for custom storage:
 
 ```go
 type TokenStore interface {
-    Get(ctx context.Context) (*TokenInfo, error)
-    Set(ctx context.Context, info *TokenInfo) error
-    Clear(ctx context.Context) error
+    Save(accountID string, token *TokenInfo) error
+    Load(accountID string) (*TokenInfo, error)
+    Delete(accountID string) error
+    List() ([]string, error)
 }
 ```
 
@@ -315,7 +317,19 @@ See [examples/sqlite-storage](./examples/sqlite-storage/) for SQLite storage exa
 |------------|-------------|
 | `Logging` | Request/response logging |
 | `Retry` | Automatic retry with exponential backoff |
+| `RateLimit` | Limits outbound send throughput |
 | `Recovery` | Panic recovery |
+
+### High-Level Options
+
+For common production setups, you can enable built-in middleware directly from `NewClient`:
+
+```go
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+    ilinksdk.WithRateLimit(5, 1),
+)
+```
 
 ### Custom Middleware
 

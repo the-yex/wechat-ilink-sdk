@@ -42,6 +42,10 @@ type Config struct {
 	RetryWaitMin time.Duration
 	RetryWaitMax time.Duration
 
+	// Rate limiting for outbound message sends.
+	RateLimitMessagesPerSecond int
+	RateLimitBurst             int
+
 	// Logging
 	Logger *slog.Logger
 
@@ -78,6 +82,10 @@ type Config struct {
 	// Extensions
 	Middleware []middleware.Middleware
 	Plugins    []plugin.Plugin
+
+	// Internal flags for auto-wiring middleware configured via options.
+	autoRetry     bool
+	autoRateLimit bool
 }
 
 // defaultConfig returns a Config with sensible defaults.
@@ -90,6 +98,7 @@ func defaultConfig() *Config {
 		MaxRetries:      3,
 		RetryWaitMin:    1 * time.Second,
 		RetryWaitMax:    5 * time.Second,
+		RateLimitBurst:  1,
 		Logger:          slog.Default(),
 	}
 }
@@ -99,5 +108,42 @@ func (c *Config) Validate() error {
 	if c.BaseURL == "" {
 		return ErrInvalidConfig
 	}
+	if c.autoRetry {
+		if c.MaxRetries < 1 || c.RetryWaitMin <= 0 || c.RetryWaitMax <= 0 || c.RetryWaitMax < c.RetryWaitMin {
+			return ErrInvalidConfig
+		}
+	}
+	if c.autoRateLimit {
+		if c.RateLimitMessagesPerSecond < 1 || c.RateLimitBurst < 1 {
+			return ErrInvalidConfig
+		}
+	}
 	return nil
+}
+
+// buildMiddleware returns the resolved middleware chain, including any middleware
+// configured through high-level options such as WithRetry and WithRateLimit.
+func buildMiddleware(c *Config) []middleware.Middleware {
+	chain := make([]middleware.Middleware, 0, len(c.Middleware)+2)
+	chain = append(chain, c.Middleware...)
+
+	// Retry wraps the transport first so each retry attempt still passes through
+	// downstream middleware such as rate limiting.
+	if c.autoRetry {
+		chain = append(chain, middleware.Retry(middleware.RetryConfig{
+			MaxAttempts: c.MaxRetries,
+			WaitMin:     c.RetryWaitMin,
+			WaitMax:     c.RetryWaitMax,
+			Retryable:   middleware.DefaultRetryable,
+		}))
+	}
+
+	if c.autoRateLimit {
+		chain = append(chain, middleware.RateLimit(middleware.RateLimitConfig{
+			MessagesPerSecond: c.RateLimitMessagesPerSecond,
+			Burst:             c.RateLimitBurst,
+		}))
+	}
+
+	return chain
 }

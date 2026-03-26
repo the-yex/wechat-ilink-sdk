@@ -12,16 +12,18 @@ import (
 // Uses a simple slice for optimal iteration performance (CPU cache friendly).
 // Plugin count is typically small (<10), so O(n) lookup is acceptable.
 type Registry struct {
-	mu      sync.RWMutex
-	plugins []Plugin
-	sdk     SDK
+	mu          sync.RWMutex
+	plugins     []Plugin
+	initialized map[string]struct{}
+	sdk         SDK
 }
 
 // NewRegistry creates a new plugin registry.
 func NewRegistry(sdk SDK) *Registry {
 	return &Registry{
-		plugins: make([]Plugin, 0),
-		sdk:     sdk,
+		plugins:     make([]Plugin, 0),
+		initialized: make(map[string]struct{}),
+		sdk:         sdk,
 	}
 }
 
@@ -45,15 +47,24 @@ func (r *Registry) Register(p Plugin) error {
 
 // Initialize initializes all registered plugins in registration order.
 func (r *Registry) Initialize(ctx context.Context) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	for _, p := range r.plugins {
-		if err := p.Initialize(ctx, r.sdk); err != nil {
+		if err := r.initializeLocked(ctx, p); err != nil {
 			return fmt.Errorf("initialize plugin %s: %w", p.Name(), err)
 		}
 	}
 	return nil
+}
+
+// InitializeOne initializes a registered plugin if it has not been initialized yet.
+// Repeated calls are safe and will not re-run plugin initialization.
+func (r *Registry) InitializeOne(ctx context.Context, p Plugin) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.initializeLocked(ctx, p)
 }
 
 // OnMessage calls OnMessage on all plugins in registration order.
@@ -102,4 +113,16 @@ func (r *Registry) All() []Plugin {
 	result := make([]Plugin, len(r.plugins))
 	copy(result, r.plugins)
 	return result
+}
+
+func (r *Registry) initializeLocked(ctx context.Context, p Plugin) error {
+	name := p.Name()
+	if _, ok := r.initialized[name]; ok {
+		return nil
+	}
+	if err := p.Initialize(ctx, r.sdk); err != nil {
+		return err
+	}
+	r.initialized[name] = struct{}{}
+	return nil
 }

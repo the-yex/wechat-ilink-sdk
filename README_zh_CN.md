@@ -271,10 +271,11 @@ client.SendText(ctx, "some_user_id", "你好")  // 返回 ErrContextTokenRequire
 client, _ := ilinksdk.NewClient(
     ilinksdk.WithLogger(logger),
     ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+    ilinksdk.WithRateLimit(5, 1),
     ilinksdk.WithMiddleware(
         middleware.Logging(logger),
         middleware.Recovery(logger),
-        middleware.Retry(middleware.DefaultRetryConfig()),
     ),
 )
 ```
@@ -297,9 +298,10 @@ tokenStore, _ := login.NewFileTokenStore("./my-bot")
 
 ```go
 type TokenStore interface {
-    Get(ctx context.Context) (*TokenInfo, error)
-    Set(ctx context.Context, info *TokenInfo) error
-    Clear(ctx context.Context) error
+    Save(accountID string, token *TokenInfo) error
+    Load(accountID string) (*TokenInfo, error)
+    Delete(accountID string) error
+    List() ([]string, error)
 }
 ```
 
@@ -313,7 +315,19 @@ SQLite 存储示例请参考 [examples/sqlite-storage](./examples/sqlite-storage
 |--------|------|
 | `Logging` | 请求/响应日志 |
 | `Retry` | 指数退避自动重试 |
+| `RateLimit` | 限制消息发送速率 |
 | `Recovery` | Panic 恢复 |
+
+### 高层配置选项
+
+常见的生产配置可以直接通过 `NewClient` 启用：
+
+```go
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+    ilinksdk.WithRateLimit(5, 1),
+)
+```
 
 ### 自定义中间件
 

@@ -3,7 +3,7 @@
 // This SDK enables developers to build WeChat bot applications with:
 //   - Message receiving and sending (text, image, video, file, voice)
 //   - CDN media upload/download with AES-128-ECB encryption
-//   - Middleware support for logging, retry, rate limiting
+//   - Middleware support for logging, retry, rate limiting, and recovery
 //   - Plugin system for extensibility
 //   - Event system for loose coupling
 //

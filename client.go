@@ -81,9 +81,12 @@ func NewClient(opts ...Option) (*Client, error) {
 		Timeout:         cfg.Timeout,
 		LongPollTimeout: cfg.LongPollTimeout,
 	})
+	apiClient.SetVersion(Version)
 
 	// Create CDN client
 	cdnClient := media.NewClient(cfg.CDNBaseURL, apiClient)
+
+	effectiveMiddleware := buildMiddleware(cfg)
 
 	// Default token store if not provided
 	tokenStore := cfg.TokenStore
@@ -101,14 +104,14 @@ func NewClient(opts ...Option) (*Client, error) {
 		cdnClient:     cdnClient,
 		contextTokens: contextTokens,
 		tokenStore:    tokenStore,
-		middleware:    cfg.Middleware,
+		middleware:    effectiveMiddleware,
 		events:        event.NewDispatcher(),
 		handlers:      &messageHandlers{},
 		stopChan:      make(chan struct{}),
 	}
 
 	// Initialize services
-	client.messages = service.NewMessageService(apiClient, cdnClient, contextTokens, cfg.Middleware)
+	client.messages = service.NewMessageService(apiClient, cdnClient, contextTokens, effectiveMiddleware)
 	client.media = service.NewMediaService(cdnClient)
 	client.session = service.NewSessionService(apiClient)
 	client.auth = service.NewAuthService(
@@ -202,9 +205,14 @@ func (c *Client) clearToken(ctx context.Context) {
 	} else if c.tokenStore != nil {
 		_ = c.tokenStore.Delete(login.DefaultAccountID)
 	}
+
+	// Drop in-memory state so a new login starts from a clean session.
+	c.contextTokens.Clear()
+
 	// Reset login state atomically
 	c.loggedIn.Store(false)
 	c.currentUser.Store(nil)
+	c.apiClient.SetToken("")
 }
 
 // Run starts the message polling loop and processes messages with the given handler.
@@ -220,10 +228,17 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 	}
 	c.running = true
 	c.mu.Unlock()
+	connected := false
 	defer func() {
 		c.mu.Lock()
 		c.running = false
 		c.mu.Unlock()
+		if connected {
+			c.events.Dispatch(context.Background(), &event.Event{
+				Type:    event.EventTypeDisconnected,
+				Context: context.Background(),
+			})
+		}
 	}()
 
 	// Auto-login if not already logged in
@@ -244,6 +259,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 		Type:    event.EventTypeConnected,
 		Context: ctx,
 	})
+	connected = true
 
 	// Get updates buffer
 	var getUpdatesBuf string
@@ -574,7 +590,8 @@ func (c *Client) RemainingPause() time.Duration {
 
 // Use adds middleware to the client.
 func (c *Client) Use(m ...middleware.Middleware) {
-	c.middleware = append(c.middleware, m...)
+	c.config.Middleware = append(c.config.Middleware, m...)
+	c.middleware = buildMiddleware(c.config)
 	// Update MessageService with new middleware
 	c.messages = service.NewMessageService(c.apiClient, c.cdnClient, c.contextTokens, c.middleware)
 }
@@ -585,7 +602,7 @@ func (c *Client) UsePlugin(p plugin.Plugin) error {
 	if err := c.plugins.Register(p); err != nil {
 		return err
 	}
-	return p.Initialize(context.Background(), c)
+	return c.plugins.InitializeOne(context.Background(), p)
 }
 
 // --- Context token accessors ---

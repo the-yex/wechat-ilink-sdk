@@ -36,6 +36,7 @@ func (m *mockSDK) DownloadMedia(ctx context.Context, req interface{}) ([]byte, e
 type mockPlugin struct {
 	name        string
 	initErr     error
+	initCalls   int
 	onMsgErr    error
 	onMsgCalled bool
 }
@@ -43,6 +44,7 @@ type mockPlugin struct {
 func (p *mockPlugin) Name() string { return p.name }
 
 func (p *mockPlugin) Initialize(ctx context.Context, sdk SDK) error {
+	p.initCalls++
 	return p.initErr
 }
 
@@ -90,6 +92,28 @@ func TestRegistry_Initialize(t *testing.T) {
 		err := registry.Initialize(context.Background())
 		require.Error(t, err)
 	})
+
+	t.Run("idempotent", func(t *testing.T) {
+		registry := NewRegistry(nil)
+		p := &mockPlugin{name: "test"}
+		_ = registry.Register(p)
+
+		require.NoError(t, registry.Initialize(context.Background()))
+		require.NoError(t, registry.Initialize(context.Background()))
+
+		assert.Equal(t, 1, p.initCalls)
+	})
+}
+
+func TestRegistry_InitializeOne(t *testing.T) {
+	registry := NewRegistry(nil)
+	p := &mockPlugin{name: "test"}
+	_ = registry.Register(p)
+
+	require.NoError(t, registry.InitializeOne(context.Background(), p))
+	require.NoError(t, registry.InitializeOne(context.Background(), p))
+
+	assert.Equal(t, 1, p.initCalls)
 }
 
 func TestRegistry_OnMessage(t *testing.T) {
