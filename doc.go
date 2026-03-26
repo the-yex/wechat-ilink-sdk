@@ -2,10 +2,12 @@
 //
 // This SDK enables developers to build WeChat bot applications with:
 //   - Message receiving and sending (text, image, video, file, voice)
+//   - Auto-login, token persistence, session-expiry recovery, and long-poll backoff
+//   - Injected HTTP clients for API, long-poll, and CDN traffic
 //   - CDN media upload/download with AES-128-ECB encryption
 //   - Middleware support for logging, retry, rate limiting, and recovery
-//   - Plugin system for extensibility
-//   - Event system for loose coupling
+//   - Graceful shutdown that drains in-flight async event handlers
+//   - Plugin system and event system for extensibility
 //
 // Example usage:
 //

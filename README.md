@@ -5,11 +5,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/the-yex/wechat-ilink-sdk.svg)](https://pkg.go.dev/github.com/the-yex/wechat-ilink-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> 🚀 **Official WeChat Bot SDK** | Legal & Safe · Ready to Use · Production Ready
+> 🚀 **Official WeChat Bot SDK** | Legal & Safe · Extensible Transport · Graceful Lifecycle · Production Ready
 >
 > Based on iLink protocol released by Tencent OpenClaw in 2026 — WeChat's **first official personal Bot API**.
 
-**Get started in 3 minutes with 5 lines:**
+**Get started in 3 minutes with 5 lines, without giving up production controls:**
 
 ```go
 client, _ := ilinksdk.NewClient(ilinksdk.WithTokenStore(tokenStore))
@@ -20,6 +20,14 @@ client.Run(ctx, nil)  // Auto QR login, auto message handling
 ```
 
 ---
+
+## Why Teams Pick This SDK
+
+- **Production-first runtime** - Auto-login, stored-token validation, session-expiry recovery, and long-poll backoff are built into the runtime instead of being pushed into application code.
+- **Fits real infrastructure** - Inject dedicated `http.Client` instances for API, long-poll, and CDN traffic to support proxies, mTLS, custom transports, tracing, and deterministic tests.
+- **Predictable lifecycle semantics** - `Close()` waits for the run loop and in-flight async event handlers to drain, which makes deploys and process shutdown safer.
+- **Single-account ergonomics that match iLink** - `RestoreToken`, `LoadDefaultToken`, and default-token helpers reduce account-ID boilerplate while keeping legacy stores compatible.
+- **Extensible without forking** - Type-specific handlers, middleware, plugins, and events let teams add behavior cleanly instead of rewriting the core runtime.
 
 ## About iLink Protocol
 
@@ -36,7 +44,10 @@ client.Run(ctx, nil)  // Auto QR login, auto message handling
 - **QR Code Login** - Scan QR code to authenticate, tokens persisted locally
 - **Auto Re-login** - Automatically validates stored tokens and handles session expiry
 - **Message Handling** - Receive and send text, image, video, file, and voice messages
-- **Middleware System** - Built-in logging, retry, and recovery middleware
+- **Transport Injection** - Customize API, long-poll, and CDN `http.Client` instances independently
+- **Operational Guardrails** - Built-in retry, rate limiting, panic recovery, and poll-failure backoff
+- **Graceful Shutdown** - Waits for in-flight async event handlers before fully closing the client
+- **Structured Errors** - Stable `errors.Is` behavior plus helpers for authentication and temporary failures
 - **Plugin System** - Extensible plugin architecture for custom functionality
 - **Event System** - Asynchronous event dispatching for loose coupling
 - **Production Ready** - Comprehensive error handling, logging, and testing
@@ -270,9 +281,26 @@ client.SendText(ctx, "some_user_id", "Hello")  // Returns ErrContextTokenRequire
 ## Configuration
 
 ```go
+transport := &http.Transport{
+    Proxy: http.ProxyFromEnvironment,
+}
+
+sharedHTTP := &http.Client{
+    Timeout:   15 * time.Second,
+    Transport: transport,
+}
+
 client, _ := ilinksdk.NewClient(
     ilinksdk.WithLogger(logger),
     ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithHTTPClient(sharedHTTP),
+    ilinksdk.WithLongPollHTTPClient(&http.Client{
+        Timeout:   40 * time.Second,
+        Transport: transport,
+    }),
+    ilinksdk.WithCDNHTTPClient(&http.Client{
+        Transport: transport,
+    }),
     ilinksdk.WithRetry(3, time.Second, 5*time.Second),
     ilinksdk.WithRateLimit(5, 1),
     ilinksdk.WithMiddleware(
@@ -281,6 +309,8 @@ client, _ := ilinksdk.NewClient(
     ),
 )
 ```
+
+This lets you keep API traffic, long-poll requests, and CDN traffic under separate control for proxying, observability, or enterprise network requirements.
 
 ## Token Management
 
@@ -292,6 +322,16 @@ tokenStore, _ := login.NewFileTokenStore("")
 
 // Or specify custom directory
 tokenStore, _ := login.NewFileTokenStore("./my-bot")
+```
+
+For single-account bots, the SDK also provides a simpler restore flow:
+
+```go
+stored, _ := login.LoadDefaultToken(tokenStore)
+_ = client.RestoreToken(stored)
+
+// Or ask the client to restore from its configured store:
+_ = client.LoadDefaultToken()
 ```
 
 ### Custom Storage
@@ -351,6 +391,7 @@ client.Use(CustomMiddleware())
 ## Event System
 
 SDK has a built-in event system for monitoring lifecycle events.
+Asynchronous event handlers are drained during `client.Close()`, so shutdown stays predictable even when background handlers are still running.
 
 ### Available Events
 

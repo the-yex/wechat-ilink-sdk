@@ -5,11 +5,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/the-yex/wechat-ilink-sdk.svg)](https://pkg.go.dev/github.com/the-yex/wechat-ilink-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> 🚀 **微信官方授权 Bot SDK** | 合法合规 · 开箱即用 · 生产就绪
+> 🚀 **微信官方授权 Bot SDK** | 合法合规 · 可接入企业网络 · 生命周期可控 · 生产就绪
 >
 > 基于 2026 年腾讯 OpenClaw 开放的 iLink 协议，这是微信**首个官方个人 Bot API**。
 
-**3 分钟上手，5 行代码运行：**
+**3 分钟上手，5 行代码跑起来，同时保留生产级控制力：**
 
 ```go
 client, _ := ilinksdk.NewClient(ilinksdk.WithTokenStore(tokenStore))
@@ -20,6 +20,14 @@ client.Run(ctx, nil)  // 自动扫码登录，自动处理消息
 ```
 
 ---
+
+## 为什么团队会优先考虑这个 SDK
+
+- **运行时能力完整** - 自动登录、已存 Token 校验、会话过期恢复、长轮询失败退避都内建在 SDK 里，不需要业务层自己拼装。
+- **适合真实生产环境** - API、长轮询、CDN 三条链路都能分别注入 `http.Client`，方便接代理、mTLS、自定义 Transport、Tracing 和稳定测试。
+- **生命周期语义明确** - `Close()` 会等待 `Run` 循环退出，并把正在执行的异步事件处理收尾完成，部署和停机更可控。
+- **单账号心智更贴合 iLink** - `RestoreToken`、`LoadDefaultToken` 和 default-token helper 减少了 `accountID` 样板代码，同时保留对旧存储结构的兼容。
+- **扩展而不失控** - 按类型 Handler、中间件、插件、事件系统分层清楚，团队可以叠加业务能力，而不是 fork 一套 SDK。
 
 ## 关于 iLink 协议
 
@@ -36,6 +44,10 @@ client.Run(ctx, nil)  // 自动扫码登录，自动处理消息
 - **扫码登录** - 扫描二维码认证，Token 本地持久化存储
 - **自动重登录** - 自动验证存储的 Token，处理会话过期
 - **消息处理** - 收发文本、图片、视频、文件、语音消息
+- **传输层可注入** - API、长轮询、CDN 可分别配置 `http.Client`
+- **运行时保护** - 内置重试、限流、Panic 恢复、长轮询失败退避
+- **优雅关闭** - 关闭客户端时会等待进行中的异步事件处理完成
+- **结构化错误模型** - 支持稳定的 `errors.Is` 判断以及认证/临时错误分类
 - **中间件系统** - 内置日志、重试、恢复中间件
 - **插件系统** - 可扩展的插件架构，支持自定义功能
 - **事件系统** - 异步事件分发，实现松耦合
@@ -268,9 +280,26 @@ client.SendText(ctx, "some_user_id", "你好")  // 返回 ErrContextTokenRequire
 ## 配置选项
 
 ```go
+transport := &http.Transport{
+    Proxy: http.ProxyFromEnvironment,
+}
+
+sharedHTTP := &http.Client{
+    Timeout:   15 * time.Second,
+    Transport: transport,
+}
+
 client, _ := ilinksdk.NewClient(
     ilinksdk.WithLogger(logger),
     ilinksdk.WithTokenStore(tokenStore),
+    ilinksdk.WithHTTPClient(sharedHTTP),
+    ilinksdk.WithLongPollHTTPClient(&http.Client{
+        Timeout:   40 * time.Second,
+        Transport: transport,
+    }),
+    ilinksdk.WithCDNHTTPClient(&http.Client{
+        Transport: transport,
+    }),
     ilinksdk.WithRetry(3, time.Second, 5*time.Second),
     ilinksdk.WithRateLimit(5, 1),
     ilinksdk.WithMiddleware(
@@ -279,6 +308,8 @@ client, _ := ilinksdk.NewClient(
     ),
 )
 ```
+
+这样可以把 API 请求、长轮询请求、CDN 请求分开治理，便于接企业代理、观测链路或定制网络策略。
 
 ## Token 管理
 
@@ -290,6 +321,16 @@ tokenStore, _ := login.NewFileTokenStore("")
 
 // 或指定存储目录
 tokenStore, _ := login.NewFileTokenStore("./my-bot")
+```
+
+对于单账号 Bot，还可以直接使用更贴近运行时的恢复方式：
+
+```go
+stored, _ := login.LoadDefaultToken(tokenStore)
+_ = client.RestoreToken(stored)
+
+// 或让 client 从当前配置的 TokenStore 中恢复：
+_ = client.LoadDefaultToken()
 ```
 
 ### 自定义存储
@@ -349,6 +390,7 @@ client.Use(CustomMiddleware())
 ## 事件系统
 
 SDK 内置事件系统，用于监听生命周期事件。
+`client.Close()` 会等待异步事件 handler 收尾完成，适合在服务退出和滚动发布时保持行为可预期。
 
 ### 可用事件
 
