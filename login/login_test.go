@@ -3,6 +3,7 @@ package login
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -150,6 +151,69 @@ func TestLoginFlow_QRCodeExpired(t *testing.T) {
 	}
 
 	assert.True(t, flow.qrCode.IsExpired())
+}
+
+func TestLoginFlow_PollStatus_LoginCanceled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ilink/bot/get_bot_qrcode" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(ilink.GetBotQRCodeResponse{
+				QRCode:   "qrcode123",
+				ImageURL: "https://example.com/qr.png",
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ilink.GetQRCodeStatusResponse{
+			Status: ilink.LoginStatusCanceled,
+		})
+	}))
+	defer server.Close()
+
+	client := ilink.NewClient(ilink.ClientConfig{BaseURL: server.URL})
+	flow := NewLoginFlow(client, LoginConfig{PollInterval: 10 * time.Millisecond})
+
+	qr, err := flow.GetQRCode(context.Background())
+	require.NoError(t, err)
+	assert.NotNil(t, qr)
+
+	_, err = flow.PollStatus(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoginCanceled)
+}
+
+func TestLoginFlow_PollStatus_ExpiredAfterMaxRefresh(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ilink/bot/get_bot_qrcode" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(ilink.GetBotQRCodeResponse{
+				QRCode:   "qrcode123",
+				ImageURL: "https://example.com/qr.png",
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ilink.GetQRCodeStatusResponse{
+			Status: ilink.LoginStatusExpired,
+		})
+	}))
+	defer server.Close()
+
+	client := ilink.NewClient(ilink.ClientConfig{BaseURL: server.URL})
+	flow := NewLoginFlow(client, LoginConfig{
+		PollInterval:    10 * time.Millisecond,
+		MaxRefreshCount: 0,
+	})
+
+	qr, err := flow.GetQRCode(context.Background())
+	require.NoError(t, err)
+	assert.NotNil(t, qr)
+
+	_, err = flow.PollStatus(context.Background())
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrQRCodeExpired))
 }
 
 func TestQRCode_IsExpired(t *testing.T) {

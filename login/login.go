@@ -169,7 +169,7 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 		// Still waiting for scan - check if client-side TTL exceeded
 		if f.qrCode.IsExpired() {
 			if f.refreshCount >= f.config.MaxRefreshCount {
-				return nil, fmt.Errorf("QR code expired after %d refreshes", f.refreshCount)
+				return nil, fmt.Errorf("%w after %d refreshes", ErrQRCodeExpired, f.refreshCount)
 			}
 			// Refresh QR code
 			_, err := f.GetQRCode(ctx)
@@ -197,7 +197,7 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 	case ilink.LoginStatusExpired:
 		// API says expired - refresh if we haven't hit the limit
 		if f.refreshCount >= f.config.MaxRefreshCount {
-			return nil, fmt.Errorf("QR code expired after %d refreshes", f.refreshCount)
+			return nil, fmt.Errorf("%w after %d refreshes", ErrQRCodeExpired, f.refreshCount)
 		}
 		// Refresh QR code
 		_, err := f.GetQRCode(ctx)
@@ -208,10 +208,10 @@ func (f *LoginFlow) checkStatus(ctx context.Context) (*ilink.LoginResult, error)
 		return nil, nil // Continue polling
 
 	case ilink.LoginStatusCanceled:
-		return nil, fmt.Errorf("login canceled by user")
+		return nil, ErrLoginCanceled
 
 	default:
-		return nil, fmt.Errorf("unknown status: %s", resp.Status)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownStatus, resp.Status)
 	}
 }
 

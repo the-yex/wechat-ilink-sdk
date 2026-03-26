@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -245,13 +244,13 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 	if !c.IsLoggedIn() {
 		c.config.Logger.Info("auto-login: not logged in, triggering login flow")
 		if _, err := c.Login(ctx, c.config.OnLogin); err != nil {
-			return fmt.Errorf("auto-login failed: %w", err)
+			return wrapError("run", fmt.Errorf("auto-login failed: %w", err), nil)
 		}
 	}
 
 	// Initialize plugins
 	if err := c.plugins.Initialize(ctx); err != nil {
-		return fmt.Errorf("initialize plugins: %w", err)
+		return wrapError("run", fmt.Errorf("initialize plugins: %w", err), nil)
 	}
 
 	// Dispatch connected event
@@ -290,7 +289,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 				result, err := c.config.OnSessionExpired(ctx)
 				if err != nil {
 					c.config.Logger.Error("re-login failed", "error", err)
-					return fmt.Errorf("re-login failed: %w", err)
+					return wrapError("run", fmt.Errorf("re-login failed: %w", err), nil)
 				}
 				if result == nil {
 					// Callback returned nil, stop the loop
@@ -303,7 +302,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			}
 
 			// No callback, return error
-			return fmt.Errorf("session expired, please re-login")
+			return wrapError("run", ErrSessionExpired, nil)
 		}
 
 		// Long poll for messages
@@ -311,13 +310,15 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			GetUpdatesBuf: getUpdatesBuf,
 		})
 		if err != nil {
+			err = wrapError("get updates", err, nil)
+
 			// Ignore context cancellation (normal shutdown)
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
 
 			// Check if it's an authentication error (token expired)
-			if isAuthError(err) {
+			if IsAuthenticationError(err) {
 				c.config.Logger.Warn("token expired, triggering re-login callback")
 
 				// Clear stored token
@@ -328,7 +329,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 					result, callbackErr := c.config.OnSessionExpired(ctx)
 					if callbackErr != nil {
 						c.config.Logger.Error("re-login failed", "error", callbackErr)
-						return fmt.Errorf("re-login failed: %w", callbackErr)
+						return wrapError("run", fmt.Errorf("re-login failed: %w", callbackErr), nil)
 					}
 					if result == nil {
 						// Callback returned nil, stop the loop
@@ -441,50 +442,52 @@ func (c *Client) OnFile(handler FileHandler) {
 
 // SendMessage sends a message.
 func (c *Client) SendMessage(ctx context.Context, req *ilink.SendMessageRequest) error {
-	return c.messages.SendMessage(ctx, req)
+	return wrapError("send message", c.messages.SendMessage(ctx, req), nil)
 }
 
 // SendText sends a text message.
 func (c *Client) SendText(ctx context.Context, toUserID, text string) error {
-	return c.messages.SendText(ctx, toUserID, text)
+	return wrapError("send text", c.messages.SendText(ctx, toUserID, text), nil)
 }
 
 // SendImage sends an image message.
 func (c *Client) SendImage(ctx context.Context, toUserID string, imageData []byte) error {
-	return c.messages.SendImage(ctx, toUserID, imageData)
+	return wrapError("send image", c.messages.SendImage(ctx, toUserID, imageData), ErrUploadFailed)
 }
 
 // SendVideo sends a video message.
 func (c *Client) SendVideo(ctx context.Context, toUserID string, videoData []byte) error {
-	return c.messages.SendVideo(ctx, toUserID, videoData)
+	return wrapError("send video", c.messages.SendVideo(ctx, toUserID, videoData), ErrUploadFailed)
 }
 
 // SendVoice sends a voice message.
 // voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
 func (c *Client) SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error {
-	return c.messages.SendVoice(ctx, toUserID, voiceData, voiceItem)
+	return wrapError("send voice", c.messages.SendVoice(ctx, toUserID, voiceData, voiceItem), ErrUploadFailed)
 }
 
 // SendFile sends a file message.
 func (c *Client) SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error {
-	return c.messages.SendFile(ctx, toUserID, fileName, fileData)
+	return wrapError("send file", c.messages.SendFile(ctx, toUserID, fileName, fileData), ErrUploadFailed)
 }
 
 // SendTyping sends a typing indicator.
 func (c *Client) SendTyping(ctx context.Context, toUserID string, typing bool) error {
-	return c.messages.SendTyping(ctx, toUserID, typing)
+	return wrapError("send typing", c.messages.SendTyping(ctx, toUserID, typing), nil)
 }
 
 // --- MediaService delegation ---
 
 // UploadMedia uploads a media file to CDN.
 func (c *Client) UploadMedia(ctx context.Context, req *media.UploadRequest) (*media.UploadResult, error) {
-	return c.media.Upload(ctx, req)
+	result, err := c.media.Upload(ctx, req)
+	return result, wrapError("upload media", err, ErrUploadFailed)
 }
 
 // DownloadMedia downloads and decrypts a media file from CDN.
 func (c *Client) DownloadMedia(ctx context.Context, req *media.DownloadRequest) ([]byte, error) {
-	return c.media.Download(ctx, req)
+	data, err := c.media.Download(ctx, req)
+	return data, wrapError("download media", err, ErrDownloadFailed)
 }
 
 // --- AuthService delegation ---
@@ -520,7 +523,7 @@ func (c *Client) Login(ctx context.Context, displayCallback login.QRCodeCallback
 
 	result, err := c.auth.Login(ctx, displayCallback)
 	if err != nil {
-		return nil, err
+		return nil, wrapError("login", err, nil)
 	}
 
 	// Call OnLoginSuccess callback if set (for user to save login info)
@@ -555,7 +558,7 @@ func (c *Client) SetToken(token, baseURL, accountID, userID string) {
 
 // LoadToken loads a stored token for an account.
 func (c *Client) LoadToken(accountID string) error {
-	return c.auth.LoadToken(accountID)
+	return wrapError("load token", c.auth.LoadToken(accountID), nil)
 }
 
 // Logout clears the stored token and triggers re-login.
@@ -600,9 +603,9 @@ func (c *Client) Use(m ...middleware.Middleware) {
 // The plugin's Initialize method is called synchronously.
 func (c *Client) UsePlugin(p plugin.Plugin) error {
 	if err := c.plugins.Register(p); err != nil {
-		return err
+		return wrapError("register plugin", err, nil)
 	}
-	return c.plugins.InitializeOne(context.Background(), p)
+	return wrapError("initialize plugin", c.plugins.InitializeOne(context.Background(), p), nil)
 }
 
 // --- Context token accessors ---
@@ -672,25 +675,4 @@ func (c *Client) Close() error {
 // Logger returns the configured logger.
 func (c *Client) Logger() *slog.Logger {
 	return c.config.Logger
-}
-
-// isAuthError checks if an error is related to authentication failure.
-func isAuthError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check if it's an APIError with auth-related code
-	var apiErr *ilink.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.Code == 401 || apiErr.Code == ilink.SessionExpiredErrCode
-	}
-
-	// Fallback to string matching for non-API errors
-	errStr := err.Error()
-	return strings.Contains(errStr, "401") ||
-		strings.Contains(errStr, "unauthorized") ||
-		strings.Contains(errStr, "invalid token") ||
-		strings.Contains(errStr, "token expired") ||
-		strings.Contains(errStr, "session timeout")
 }

@@ -20,6 +20,9 @@ var (
 	// ErrSessionPaused indicates API calls are paused due to session expiry.
 	ErrSessionPaused = errors.New("session is paused, please wait")
 
+	// ErrAuthenticationFailed indicates the request failed due to invalid or missing authentication.
+	ErrAuthenticationFailed = errors.New("authentication failed")
+
 	// ErrContextTokenRequired indicates context token is required for sending messages.
 	// It aliases the message service sentinel so errors.Is works for SDK callers.
 	ErrContextTokenRequired = service.ErrContextTokenRequired
