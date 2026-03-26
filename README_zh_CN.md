@@ -262,6 +262,8 @@ client.Use(CustomMiddleware())
 
 ## 事件系统
 
+SDK 内置事件系统，用于监听生命周期事件。
+
 ### 可用事件
 
 | 事件 | 触发时机 |
@@ -276,9 +278,16 @@ client.Use(CustomMiddleware())
 ### 使用事件
 
 ```go
-client.OnMessage(func(ctx context.Context, e *event.Event) error {
-    msg := e.Data.(*ilink.Message)
-    log.Printf("收到消息: %s", msg.GetText())
+// 监听登录成功事件
+client.Events().Subscribe(event.EventTypeLogin, func(ctx context.Context, e *event.Event) error {
+    result := e.Data.(*ilink.LoginResult)
+    log.Printf("登录成功: %s", result.UserID)
+    return nil
+})
+
+// 监听会话过期事件
+client.Events().Subscribe(event.EventTypeSessionExpired, func(ctx context.Context, e *event.Event) error {
+    log.Println("会话已过期")
     return nil
 })
 ```

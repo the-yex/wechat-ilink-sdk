@@ -264,6 +264,8 @@ client.Use(CustomMiddleware())
 
 ## Event System
 
+SDK has a built-in event system for monitoring lifecycle events.
+
 ### Available Events
 
 | Event | When Fired |
@@ -278,9 +280,16 @@ client.Use(CustomMiddleware())
 ### Using Events
 
 ```go
-client.OnMessage(func(ctx context.Context, e *event.Event) error {
-    msg := e.Data.(*ilink.Message)
-    log.Printf("Received: %s", msg.GetText())
+// Subscribe to login event
+client.Events().Subscribe(event.EventTypeLogin, func(ctx context.Context, e *event.Event) error {
+    result := e.Data.(*ilink.LoginResult)
+    log.Printf("Logged in: %s", result.UserID)
+    return nil
+})
+
+// Subscribe to session expired event
+client.Events().Subscribe(event.EventTypeSessionExpired, func(ctx context.Context, e *event.Event) error {
+    log.Println("Session expired")
     return nil
 })
 ```
