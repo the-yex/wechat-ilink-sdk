@@ -3,14 +3,30 @@ package ilink
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func jsonHTTPResponse(statusCode int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: statusCode,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
 
 func TestClient_GetUpdates(t *testing.T) {
 	tests := []struct {
@@ -253,6 +269,59 @@ func TestClient_GetQRCodeStatus(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, resp.Status)
 		})
 	}
+}
+
+func TestNewClient_UsesInjectedHTTPClients(t *testing.T) {
+	apiCalls := 0
+	longPollCalls := 0
+
+	client := NewClient(ClientConfig{
+		BaseURL: "https://api.example.com",
+		HTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				apiCalls++
+				assert.Equal(t, "/ilink/bot/sendtyping", req.URL.Path)
+				return jsonHTTPResponse(http.StatusOK, `{"ret":0}`), nil
+			}),
+		},
+		LongPollHTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				longPollCalls++
+				assert.Equal(t, "/ilink/bot/getupdates", req.URL.Path)
+				return jsonHTTPResponse(http.StatusOK, `{"ret":0,"messages":[]}`), nil
+			}),
+		},
+	})
+
+	require.NoError(t, client.SendTyping(context.Background(), &SendTypingRequest{}))
+
+	resp, err := client.GetUpdates(context.Background(), &GetUpdatesRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, resp.Messages)
+
+	assert.Equal(t, 1, apiCalls)
+	assert.Equal(t, 1, longPollCalls)
+}
+
+func TestNewClient_DerivesLongPollClientFromHTTPClient(t *testing.T) {
+	transport := &http.Transport{}
+	baseClient := &http.Client{
+		Timeout:   1500 * time.Millisecond,
+		Transport: transport,
+	}
+
+	client := NewClient(ClientConfig{
+		BaseURL:         "https://api.example.com",
+		HTTPClient:      baseClient,
+		LongPollTimeout: 42 * time.Second,
+	})
+
+	assert.NotSame(t, baseClient, client.http)
+	assert.NotSame(t, client.http, client.httpLP)
+	assert.Equal(t, 1500*time.Millisecond, client.http.Timeout)
+	assert.Equal(t, 42*time.Second, client.httpLP.Timeout)
+	assert.Same(t, transport, client.http.Transport)
+	assert.Same(t, transport, client.httpLP.Transport)
 }
 
 func TestClient_SessionGuard(t *testing.T) {

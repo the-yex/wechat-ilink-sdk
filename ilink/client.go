@@ -37,10 +37,12 @@ var baseHeaders = http.Header{
 
 // ClientConfig holds the API client configuration.
 type ClientConfig struct {
-	BaseURL         string
-	Token           string
-	Timeout         time.Duration
-	LongPollTimeout time.Duration
+	BaseURL            string
+	Token              string
+	Timeout            time.Duration
+	LongPollTimeout    time.Duration
+	HTTPClient         *http.Client
+	LongPollHTTPClient *http.Client
 }
 
 // Client handles all WeChat API communication.
@@ -65,19 +67,55 @@ func NewClient(cfg ClientConfig) *Client {
 		cfg.BaseURL += "/"
 	}
 
-	// Create shared transport for connection pooling
-	transport := &http.Transport{
+	transport := defaultTransport()
+
+	return &Client{
+		config:  cfg,
+		http:    resolveHTTPClient(cfg.HTTPClient, cfg.Timeout, transport),
+		httpLP:  resolveLongPollHTTPClient(cfg.HTTPClient, cfg.LongPollHTTPClient, cfg.LongPollTimeout, transport),
+		session: NewSessionGuard(),
+		version: "1.0.0",
+	}
+}
+
+func defaultTransport() *http.Transport {
+	return &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	}
+}
 
-	return &Client{
-		config:  cfg,
-		http:    &http.Client{Timeout: cfg.Timeout, Transport: transport},
-		httpLP:  &http.Client{Timeout: cfg.LongPollTimeout, Transport: transport},
-		session: NewSessionGuard(),
-		version: "1.0.0",
+func cloneHTTPClient(client *http.Client) *http.Client {
+	if client == nil {
+		return nil
+	}
+	cloned := *client
+	return &cloned
+}
+
+func resolveHTTPClient(provided *http.Client, timeout time.Duration, transport http.RoundTripper) *http.Client {
+	if provided != nil {
+		return cloneHTTPClient(provided)
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
+}
+
+func resolveLongPollHTTPClient(baseClient, provided *http.Client, timeout time.Duration, transport http.RoundTripper) *http.Client {
+	if provided != nil {
+		return cloneHTTPClient(provided)
+	}
+	if baseClient != nil {
+		client := cloneHTTPClient(baseClient)
+		client.Timeout = timeout
+		return client
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
 	}
 }
 

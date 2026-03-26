@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +20,12 @@ import (
 	"github.com/the-yex/wechat-ilink-sdk/login"
 	"github.com/the-yex/wechat-ilink-sdk/media"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 type testAPIClient struct {
 	sendCalls int
@@ -203,4 +211,63 @@ func TestClose_MakesActiveOperationsFail(t *testing.T) {
 
 	err = client.Logout(context.Background())
 	require.ErrorIs(t, err, ErrClientClosed)
+}
+
+func TestNewClient_WiresInjectedHTTPClients(t *testing.T) {
+	apiCalls := 0
+	longPollCalls := 0
+	cdnCalls := 0
+
+	client, err := NewClient(
+		WithBaseURL("https://api.example.com"),
+		WithCDNBaseURL("https://cdn.example.com"),
+		WithHTTPClient(&http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				apiCalls++
+				assert.Equal(t, "/ilink/bot/sendtyping", req.URL.Path)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"ret":0}`)),
+				}, nil
+			}),
+		}),
+		WithLongPollHTTPClient(&http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				longPollCalls++
+				assert.Equal(t, "/ilink/bot/get_qrcode_status", req.URL.Path)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"status":"wait"}`)),
+				}, nil
+			}),
+		}),
+		WithCDNHTTPClient(&http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				cdnCalls++
+				assert.Equal(t, "/download", req.URL.Path)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("payload")),
+				}, nil
+			}),
+		}),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, client.apiClient.SendTyping(context.Background(), &ilink.SendTypingRequest{}))
+
+	status, err := client.apiClient.GetQRCodeStatus(context.Background(), &ilink.GetQRCodeStatusRequest{QRCode: "qr"})
+	require.NoError(t, err)
+	assert.Equal(t, ilink.LoginStatusWaiting, status.Status)
+
+	data, err := client.cdnClient.DownloadPlain(context.Background(), "download_param")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("payload"), data)
+
+	assert.Equal(t, 1, apiCalls)
+	assert.Equal(t, 1, longPollCalls)
+	assert.Equal(t, 1, cdnCalls)
 }

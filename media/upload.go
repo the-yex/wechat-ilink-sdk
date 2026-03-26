@@ -30,31 +30,50 @@ type Client struct {
 
 // NewClient creates a new CDN client.
 func NewClient(baseURL string, apiClient *ilink.Client) *Client {
+	return NewClientWithHTTPClient(baseURL, apiClient, nil)
+}
+
+// NewClientWithHTTPClient creates a new CDN client with an optional injected HTTP client.
+func NewClientWithHTTPClient(baseURL string, apiClient *ilink.Client, httpClient *http.Client) *Client {
 	if baseURL == "" {
 		baseURL = DefaultCDNBaseURL
 	}
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	return &Client{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Transport: &http.Transport{
-				MaxIdleConns:        50,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
-		apiClient: apiClient,
+	if httpClient == nil {
+		httpClient = defaultHTTPClient()
+	} else {
+		httpClient = cloneHTTPClient(httpClient)
 	}
+	return &Client{
+		baseURL:    baseURL,
+		httpClient: httpClient,
+		apiClient:  apiClient,
+	}
+}
+
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        50,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
+}
+
+func cloneHTTPClient(client *http.Client) *http.Client {
+	cloned := *client
+	return &cloned
 }
 
 // UploadRequest represents a media upload request.
 type UploadRequest struct {
-	Data      []byte               // File data to upload
+	Data      []byte                // File data to upload
 	MediaType ilink.UploadMediaType // Media type (IMAGE, VIDEO, FILE, VOICE)
-	ToUserID  string               // Target user ID
-	AESKey    []byte               // Optional; generated if nil
+	ToUserID  string                // Target user ID
+	AESKey    []byte                // Optional; generated if nil
 }
 
 // UploadResult contains upload result information.

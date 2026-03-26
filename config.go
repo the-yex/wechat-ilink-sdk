@@ -4,6 +4,7 @@ package ilinksdk
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
@@ -36,6 +37,15 @@ type Config struct {
 	// HTTP client settings
 	Timeout         time.Duration
 	LongPollTimeout time.Duration
+
+	// Optional injected HTTP clients.
+	// If HTTPClient is set, it is used for standard API requests.
+	// If LongPollHTTPClient is nil, the SDK derives one from HTTPClient for
+	// long-poll endpoints while applying the configured long-poll timeout.
+	// CDNHTTPClient is used for media upload/download requests.
+	HTTPClient         *http.Client
+	LongPollHTTPClient *http.Client
+	CDNHTTPClient      *http.Client
 
 	// Long-poll error backoff configuration.
 	PollErrorBackoffMin time.Duration

@@ -4,14 +4,22 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestClient_Upload(t *testing.T) {
 	data := []byte("test image data")
@@ -173,6 +181,29 @@ func TestCDNError(t *testing.T) {
 	err2 := &CDNError{StatusCode: 500, Message: "server error"}
 	assert.False(t, err2.IsClientError())
 	assert.True(t, err2.IsServerError())
+}
+
+func TestNewClientWithHTTPClient_UsesInjectedHTTPClient(t *testing.T) {
+	calls := 0
+	injected := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			assert.Equal(t, "/download", req.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("payload")),
+			}, nil
+		}),
+	}
+
+	client := NewClientWithHTTPClient("https://cdn.example.com", nil, injected)
+
+	data, err := client.DownloadPlain(context.Background(), "download_param")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("payload"), data)
+	assert.Equal(t, 1, calls)
+	assert.NotSame(t, injected, client.httpClient)
 }
 
 func keyToHex(key []byte) string {

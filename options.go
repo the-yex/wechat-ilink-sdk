@@ -3,6 +3,7 @@ package ilinksdk
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk/login"
@@ -45,6 +46,29 @@ func WithTimeout(timeout time.Duration) Option {
 func WithLongPollTimeout(timeout time.Duration) Option {
 	return func(c *Config) {
 		c.LongPollTimeout = timeout
+	}
+}
+
+// WithHTTPClient injects the HTTP client used for standard API requests.
+// Long-poll requests inherit this client's transport unless WithLongPollHTTPClient
+// is provided explicitly.
+func WithHTTPClient(client *http.Client) Option {
+	return func(c *Config) {
+		c.HTTPClient = client
+	}
+}
+
+// WithLongPollHTTPClient injects the HTTP client used for long-poll requests.
+func WithLongPollHTTPClient(client *http.Client) Option {
+	return func(c *Config) {
+		c.LongPollHTTPClient = client
+	}
+}
+
+// WithCDNHTTPClient injects the HTTP client used for CDN upload/download requests.
+func WithCDNHTTPClient(client *http.Client) Option {
+	return func(c *Config) {
+		c.CDNHTTPClient = client
 	}
 }
 

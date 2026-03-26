@@ -76,15 +76,17 @@ func NewClient(opts ...Option) (*Client, error) {
 
 	// Create API client
 	apiClient := ilink.NewClient(ilink.ClientConfig{
-		BaseURL:         cfg.BaseURL,
-		Token:           cfg.Token,
-		Timeout:         cfg.Timeout,
-		LongPollTimeout: cfg.LongPollTimeout,
+		BaseURL:            cfg.BaseURL,
+		Token:              cfg.Token,
+		Timeout:            cfg.Timeout,
+		LongPollTimeout:    cfg.LongPollTimeout,
+		HTTPClient:         cfg.HTTPClient,
+		LongPollHTTPClient: cfg.LongPollHTTPClient,
 	})
 	apiClient.SetVersion(Version)
 
 	// Create CDN client
-	cdnClient := media.NewClient(cfg.CDNBaseURL, apiClient)
+	cdnClient := media.NewClientWithHTTPClient(cfg.CDNBaseURL, apiClient, cfg.CDNHTTPClient)
 
 	effectiveMiddleware := buildMiddleware(cfg)
 
