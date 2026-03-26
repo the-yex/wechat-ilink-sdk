@@ -342,9 +342,9 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 		// Process messages
 		for _, msg := range resp.Messages {
-			// Store context token (use empty accountID for simple lookup)
+			// Store context token
 			if msg.ContextToken != "" && msg.FromUserID != "" {
-				c.contextTokens.Set("", msg.FromUserID, msg.ContextToken)
+				c.contextTokens.Set(msg.FromUserID, msg.ContextToken)
 			}
 
 			// Dispatch message event
@@ -591,13 +591,13 @@ func (c *Client) UsePlugin(p plugin.Plugin) error {
 // --- Context token accessors ---
 
 // GetContextToken returns the context token for a user.
-func (c *Client) GetContextToken(accountID, userID string) string {
-	return c.contextTokens.Get(accountID, userID)
+func (c *Client) GetContextToken(userID string) string {
+	return c.contextTokens.Get(userID)
 }
 
 // SetContextToken sets the context token for a user.
-func (c *Client) SetContextToken(accountID, userID, token string) {
-	c.contextTokens.Set(accountID, userID, token)
+func (c *Client) SetContextToken(userID, token string) {
+	c.contextTokens.Set(userID, token)
 }
 
 // --- Service accessors (optional, for advanced users) ---

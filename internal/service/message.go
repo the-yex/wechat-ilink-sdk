@@ -52,7 +52,7 @@ func (s *messageService) SendMessage(ctx context.Context, req *ilink.SendMessage
 
 // SendText sends a text message to a user.
 func (s *messageService) SendText(ctx context.Context, toUserID, text string) error {
-	contextToken := s.contextTokens.Get("", toUserID)
+	contextToken := s.contextTokens.Get(toUserID)
 	if contextToken == "" {
 		return ErrContextTokenRequired
 	}
@@ -64,7 +64,7 @@ func (s *messageService) SendText(ctx context.Context, toUserID, text string) er
 
 // SendImage sends an image message to a user.
 func (s *messageService) SendImage(ctx context.Context, toUserID string, imageData []byte) error {
-	contextToken := s.contextTokens.Get("", toUserID)
+	contextToken := s.contextTokens.Get(toUserID)
 	if contextToken == "" {
 		return ErrContextTokenRequired
 	}
@@ -94,7 +94,7 @@ func (s *messageService) SendImage(ctx context.Context, toUserID string, imageDa
 
 // SendVideo sends a video message to a user.
 func (s *messageService) SendVideo(ctx context.Context, toUserID string, videoData []byte) error {
-	contextToken := s.contextTokens.Get("", toUserID)
+	contextToken := s.contextTokens.Get(toUserID)
 	if contextToken == "" {
 		return ErrContextTokenRequired
 	}
@@ -125,7 +125,7 @@ func (s *messageService) SendVideo(ctx context.Context, toUserID string, videoDa
 // SendVoice sends a voice message to a user.
 // voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
 func (s *messageService) SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error {
-	contextToken := s.contextTokens.Get("", toUserID)
+	contextToken := s.contextTokens.Get(toUserID)
 	if contextToken == "" {
 		return ErrContextTokenRequired
 	}
@@ -164,7 +164,7 @@ func (s *messageService) SendVoice(ctx context.Context, toUserID string, voiceDa
 
 // SendFile sends a file message to a user.
 func (s *messageService) SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error {
-	contextToken := s.contextTokens.Get("", toUserID)
+	contextToken := s.contextTokens.Get(toUserID)
 	if contextToken == "" {
 		return ErrContextTokenRequired
 	}
