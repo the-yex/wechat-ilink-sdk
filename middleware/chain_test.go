@@ -143,6 +143,20 @@ func TestRetry(t *testing.T) {
 		assert.Equal(t, expectedErr, err)
 		assert.Equal(t, 1, calls)
 	})
+
+	t.Run("default config skips context cancellation", func(t *testing.T) {
+		calls := 0
+		handler := func(ctx context.Context, req *ilink.SendMessageRequest) error {
+			calls++
+			return context.Canceled
+		}
+
+		wrapped := Retry(DefaultRetryConfig())(handler)
+		err := wrapped(context.Background(), &ilink.SendMessageRequest{})
+
+		require.ErrorIs(t, err, context.Canceled)
+		assert.Equal(t, 1, calls)
+	})
 }
 
 func TestRecovery(t *testing.T) {

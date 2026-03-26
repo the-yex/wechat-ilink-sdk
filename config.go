@@ -134,7 +134,7 @@ func buildMiddleware(c *Config) []middleware.Middleware {
 			MaxAttempts: c.MaxRetries,
 			WaitMin:     c.RetryWaitMin,
 			WaitMax:     c.RetryWaitMax,
-			Retryable:   middleware.DefaultRetryable,
+			Retryable:   middleware.IsRetryableError,
 		}))
 	}
 

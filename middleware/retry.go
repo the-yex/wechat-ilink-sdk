@@ -11,9 +11,9 @@ import (
 
 // RetryConfig holds retry configuration.
 type RetryConfig struct {
-	MaxAttempts int           // Maximum number of attempts (including initial)
-	WaitMin     time.Duration // Minimum wait time between retries
-	WaitMax     time.Duration // Maximum wait time between retries
+	MaxAttempts int              // Maximum number of attempts (including initial)
+	WaitMin     time.Duration    // Minimum wait time between retries
+	WaitMax     time.Duration    // Maximum wait time between retries
 	Retryable   func(error) bool // Function to determine if error is retryable
 }
 
@@ -23,7 +23,7 @@ func DefaultRetryConfig() RetryConfig {
 		MaxAttempts: 3,
 		WaitMin:     1 * time.Second,
 		WaitMax:     5 * time.Second,
-		Retryable:   DefaultRetryable,
+		Retryable:   IsRetryableError,
 	}
 }
 
@@ -68,7 +68,7 @@ func Retry(cfg RetryConfig) Middleware {
 		cfg.WaitMax = 5 * time.Second
 	}
 	if cfg.Retryable == nil {
-		cfg.Retryable = DefaultRetryable
+		cfg.Retryable = IsRetryableError
 	}
 
 	return func(next Handler) Handler {

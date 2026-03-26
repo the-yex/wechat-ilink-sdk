@@ -2,6 +2,8 @@ package ilinksdk
 
 import (
 	"errors"
+
+	"github.com/the-yex/wechat-ilink-sdk/internal/service"
 )
 
 // Sentinel errors for the SDK.
@@ -19,7 +21,8 @@ var (
 	ErrSessionPaused = errors.New("session is paused, please wait")
 
 	// ErrContextTokenRequired indicates context token is required for sending messages.
-	ErrContextTokenRequired = errors.New("context token is required")
+	// It aliases the message service sentinel so errors.Is works for SDK callers.
+	ErrContextTokenRequired = service.ErrContextTokenRequired
 
 	// ErrInvalidMediaType indicates an invalid media type.
 	ErrInvalidMediaType = errors.New("invalid media type")
