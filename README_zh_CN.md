@@ -347,14 +347,17 @@ SDK 提供以下内置插件：
 用户发送 `/exit` 命令即可退出登录，SDK 会清除本地 Token 并自动弹出二维码让用户重新扫码登录：
 
 ```go
-logoutPlugin := plugin.NewLogoutPlugin(func(ctx context.Context) error {
-    // 可选：退出后的回调处理
-    log.Println("用户已退出登录，等待重新扫码")
-    return nil
-})
-
+// 简单用法 - 直接注册
 client, _ := ilinksdk.NewClient(
-    ilinksdk.WithPlugins(logoutPlugin),
+    ilinksdk.WithPlugins(plugin.NewLogoutPlugin()),
+)
+
+// 可选：带回调
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(plugin.NewLogoutPlugin(func(ctx context.Context) error {
+        log.Println("用户已退出，等待重新扫码")
+        return nil
+    })),
 )
 ```
 

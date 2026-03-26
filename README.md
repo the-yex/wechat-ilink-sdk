@@ -349,14 +349,17 @@ SDK provides the following built-in plugins:
 Users can logout by sending `/exit` command. SDK clears the stored token and automatically shows a QR code for re-login:
 
 ```go
-logoutPlugin := plugin.NewLogoutPlugin(func(ctx context.Context) error {
-    // Optional: callback after exit
-    log.Println("User logged out, waiting for re-scan")
-    return nil
-})
-
+// Simple usage - direct registration
 client, _ := ilinksdk.NewClient(
-    ilinksdk.WithPlugins(logoutPlugin),
+    ilinksdk.WithPlugins(plugin.NewLogoutPlugin()),
+)
+
+// Optional: with callback
+client, _ := ilinksdk.NewClient(
+    ilinksdk.WithPlugins(plugin.NewLogoutPlugin(func(ctx context.Context) error {
+        log.Println("User logged out, waiting for re-scan")
+        return nil
+    })),
 )
 ```
 

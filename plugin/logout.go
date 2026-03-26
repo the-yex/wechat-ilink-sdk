@@ -16,11 +16,16 @@ type LogoutPlugin struct {
 	confirmed bool
 }
 
-// NewLogoutPlugin creates a new exit plugin.
-// onExit is an optional callback that will be called after exit.
-func NewLogoutPlugin(onExit func(ctx context.Context) error) *LogoutPlugin {
+// NewLogoutPlugin creates a new exit plugin with an optional callback.
+// The callback is called after successful logout.
+// If no callback is needed, use NewLogoutPlugin(nil) or just NewLogoutPlugin().
+func NewLogoutPlugin(onExit ...func(ctx context.Context) error) *LogoutPlugin {
+	var callback func(ctx context.Context) error
+	if len(onExit) > 0 && onExit[0] != nil {
+		callback = onExit[0]
+	}
 	return &LogoutPlugin{
-		onExit:  onExit,
+		onExit:  callback,
 		enabled: true,
 	}
 }

@@ -328,7 +328,12 @@ func main() {
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
-		ilinksdk.WithPlugins(loggerPlugin, commandPlugin, autoReplyPlugin),
+		ilinksdk.WithPlugins(
+			loggerPlugin,
+			commandPlugin,
+			autoReplyPlugin,
+			plugin.NewLogoutPlugin(), // 内置退出插件
+		),
 	)
 	if err != nil {
 		logger.Error("创建客户端失败", "error", err)
@@ -351,6 +356,7 @@ func main() {
 	fmt.Println("  - logger: 消息日志记录")
 	fmt.Println("  - command-processor: 命令处理 (/help, /ping, /echo)")
 	fmt.Println("  - auto-reply: 关键词自动回复")
+	fmt.Println("  - logout: 退出登录 (/exit)")
 	fmt.Println("\n按 Ctrl+C 退出")
 
 	// 设置信号处理
