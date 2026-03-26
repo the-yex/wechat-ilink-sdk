@@ -34,3 +34,5 @@ go.work.sum
 docs/openclaw-weixin
 .weixin
 *.db
+.gocache
+.gotmp
