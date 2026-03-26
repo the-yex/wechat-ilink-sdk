@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	ilinksdk "github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/event"
@@ -106,32 +105,7 @@ func main() {
 
 		return client.SendText(ctx, msg.FromUserID, "收到: "+text)
 	})
-
-	// ========================================
-	// 定时发送消息（演示主动发送功能）
-	// ========================================
-	stopTicker := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-
-				if err := client.SendText(ctx, client.CurrentUser().UserID, "你好"); err != nil {
-					logger.Error("发送消息失败", "error", err)
-				}
-
-			case <-stopTicker:
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	defer close(stopTicker)
-
+	
 	// Run the bot
 	fmt.Println("启动机器人...")
 	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {

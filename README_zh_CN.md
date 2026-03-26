@@ -206,6 +206,32 @@ client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
 })
 ```
 
+## 消息发送限制
+
+⚠️ **重要：** SDK 只能**被动回复**消息，不能主动发送。
+
+**原因：** 微信 iLink 协议要求发送消息时必须携带 `context_token`，该 Token 只有在收到用户消息时才能获取。
+
+**工作流程：**
+```
+用户发送消息 → SDK 收到 context_token → 存储 → 机器人回复时使用
+```
+
+**正确用法：**
+```go
+// ✅ 正确：在收到消息后回复
+client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    return client.SendText(ctx, msg.FromUserID, "收到: "+text)
+})
+
+// ❌ 错误：主动发送（会失败，因为没有 context_token）
+client.SendText(ctx, "some_user_id", "你好")  // 返回 ErrContextTokenRequired
+```
+
+**限制：**
+- 只能给**发过消息的用户**回复
+- 如果用户从未发过消息，无法主动联系
+
 ## 配置选项
 
 ```go

@@ -208,6 +208,32 @@ client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
 })
 ```
 
+## Message Sending Limitations
+
+⚠️ **Important:** The SDK can only **reply** to messages, not initiate them.
+
+**Reason:** The WeChat iLink protocol requires a `context_token` when sending messages, which is only available when receiving a message from a user.
+
+**How it works:**
+```
+User sends message → SDK receives context_token → stores it → Bot uses it to reply
+```
+
+**Correct usage:**
+```go
+// ✅ Correct: Reply after receiving a message
+client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
+})
+
+// ❌ Wrong: Initiate a message (will fail, no context_token)
+client.SendText(ctx, "some_user_id", "Hello")  // Returns ErrContextTokenRequired
+```
+
+**Limitations:**
+- Can only reply to users who have **previously sent a message**
+- Cannot proactively contact users who have never messaged the bot
+
 ## Configuration
 
 ```go
