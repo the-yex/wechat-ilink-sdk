@@ -334,8 +334,8 @@ client, _ := ilinksdk.NewClient(
 **方式二：单个注册**
 
 ```go
-client.UsePlugin(context.Background(), plugin1)
-client.UsePlugin(context.Background(), plugin2)
+client.UsePlugin(plugin1)
+client.UsePlugin(plugin2)
 ```
 
 ### 内置插件

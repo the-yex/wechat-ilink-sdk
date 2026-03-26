@@ -578,24 +578,11 @@ func (c *Client) Use(m ...middleware.Middleware) {
 
 // UsePlugin registers a plugin and initializes it.
 // The plugin's Initialize method is called synchronously.
-func (c *Client) UsePlugin(ctx context.Context, p plugin.Plugin) error {
+func (c *Client) UsePlugin(p plugin.Plugin) error {
 	if err := c.plugins.Register(p); err != nil {
 		return err
 	}
-	return p.Initialize(ctx, c)
-}
-
-// SetOnSessionExpired sets the callback for session expiration.
-// This allows setting the callback after client creation, which is useful
-// when the callback needs to reference the client itself.
-func (c *Client) SetOnSessionExpired(callback SessionExpiredCallback) {
-	c.config.OnSessionExpired = callback
-}
-
-// UsePluginSimple registers a plugin without a context.
-// Deprecated: Use UsePlugin(ctx, plugin) instead.
-func (c *Client) UsePluginSimple(p plugin.Plugin) error {
-	return c.UsePlugin(context.Background(), p)
+	return p.Initialize(context.Background(), c)
 }
 
 // --- Context token accessors ---

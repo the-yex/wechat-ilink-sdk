@@ -336,8 +336,8 @@ client, _ := ilinksdk.NewClient(
 **Option 2: Individual Registration**
 
 ```go
-client.UsePlugin(context.Background(), plugin1)
-client.UsePlugin(context.Background(), plugin2)
+client.UsePlugin(plugin1)
+client.UsePlugin(plugin2)
 ```
 
 ### Built-in Plugins
