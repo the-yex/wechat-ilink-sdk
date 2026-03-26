@@ -262,6 +262,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 	// Get updates buffer
 	var getUpdatesBuf string
+	consecutivePollErrors := 0
 
 	for {
 		select {
@@ -314,7 +315,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 			// Ignore context cancellation (normal shutdown)
 			if errors.Is(err, context.Canceled) {
-				return nil
+				return ctx.Err()
 			}
 
 			// Check if it's an authentication error (token expired)
@@ -349,8 +350,15 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			})
 			c.plugins.OnError(ctx, err)
 			c.config.Logger.Error("get updates failed", "error", err)
+
+			consecutivePollErrors++
+			if backoffErr := c.waitPollErrorBackoff(ctx, consecutivePollErrors, err); backoffErr != nil {
+				return backoffErr
+			}
 			continue
 		}
+
+		consecutivePollErrors = 0
 
 		// Update buffer for next request
 		if resp.GetUpdatesBuf != "" {

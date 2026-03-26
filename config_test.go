@@ -20,6 +20,12 @@ func TestNewClient_RejectsInvalidRateLimitConfig(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidConfig)
 }
 
+func TestNewClient_RejectsInvalidPollErrorBackoffConfig(t *testing.T) {
+	_, err := NewClient(WithPollErrorBackoff(50*time.Millisecond, 10*time.Millisecond))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidConfig)
+}
+
 func TestNewClient_AllowsValidHighLevelMiddlewareOptions(t *testing.T) {
 	client, err := NewClient(
 		WithRetry(3, time.Millisecond, 2*time.Millisecond),

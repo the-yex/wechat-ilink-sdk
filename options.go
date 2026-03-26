@@ -48,6 +48,14 @@ func WithLongPollTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithPollErrorBackoff configures exponential backoff after long-poll failures.
+func WithPollErrorBackoff(min, max time.Duration) Option {
+	return func(c *Config) {
+		c.PollErrorBackoffMin = min
+		c.PollErrorBackoffMax = max
+	}
+}
+
 // WithLogger sets the logger.
 func WithLogger(logger *slog.Logger) Option {
 	return func(c *Config) {

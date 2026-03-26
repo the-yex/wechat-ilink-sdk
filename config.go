@@ -37,6 +37,10 @@ type Config struct {
 	Timeout         time.Duration
 	LongPollTimeout time.Duration
 
+	// Long-poll error backoff configuration.
+	PollErrorBackoffMin time.Duration
+	PollErrorBackoffMax time.Duration
+
 	// Retry configuration
 	MaxRetries   int
 	RetryWaitMin time.Duration
@@ -91,15 +95,17 @@ type Config struct {
 // defaultConfig returns a Config with sensible defaults.
 func defaultConfig() *Config {
 	return &Config{
-		BaseURL:         "https://ilinkai.weixin.qq.com",
-		CDNBaseURL:      "https://novac2c.cdn.weixin.qq.com/c2c",
-		Timeout:         30 * time.Second,
-		LongPollTimeout: 35 * time.Second,
-		MaxRetries:      3,
-		RetryWaitMin:    1 * time.Second,
-		RetryWaitMax:    5 * time.Second,
-		RateLimitBurst:  1,
-		Logger:          slog.Default(),
+		BaseURL:             "https://ilinkai.weixin.qq.com",
+		CDNBaseURL:          "https://novac2c.cdn.weixin.qq.com/c2c",
+		Timeout:             30 * time.Second,
+		LongPollTimeout:     35 * time.Second,
+		PollErrorBackoffMin: 1 * time.Second,
+		PollErrorBackoffMax: 30 * time.Second,
+		MaxRetries:          3,
+		RetryWaitMin:        1 * time.Second,
+		RetryWaitMax:        5 * time.Second,
+		RateLimitBurst:      1,
+		Logger:              slog.Default(),
 	}
 }
 
@@ -112,6 +118,9 @@ func (c *Config) Validate() error {
 		if c.MaxRetries < 1 || c.RetryWaitMin <= 0 || c.RetryWaitMax <= 0 || c.RetryWaitMax < c.RetryWaitMin {
 			return ErrInvalidConfig
 		}
+	}
+	if c.PollErrorBackoffMin <= 0 || c.PollErrorBackoffMax <= 0 || c.PollErrorBackoffMax < c.PollErrorBackoffMin {
+		return ErrInvalidConfig
 	}
 	if c.autoRateLimit {
 		if c.RateLimitMessagesPerSecond < 1 || c.RateLimitBurst < 1 {

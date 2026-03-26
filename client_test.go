@@ -2,7 +2,11 @@ package ilinksdk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -125,4 +129,58 @@ func TestRunDispatchesDisconnectedEvent(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("expected disconnected event")
 	}
+}
+
+func TestRun_BacksOffAfterPollErrors(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		requestTimes []time.Time
+		requestCount int
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		requestTimes = append(requestTimes, time.Now())
+		count := requestCount
+		mu.Unlock()
+
+		if r.URL.Path != "/ilink/bot/getupdates" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if count <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"errmsg":"temporary failure"}`))
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(ilink.GetUpdatesResponse{})
+		cancel()
+	}))
+	defer server.Close()
+
+	client, err := NewClient(
+		WithBaseURL(server.URL),
+		WithPollErrorBackoff(20*time.Millisecond, 50*time.Millisecond),
+	)
+	require.NoError(t, err)
+
+	client.SetToken("live-token", server.URL, login.DefaultAccountID, "user-1")
+
+	err = client.Run(ctx, nil)
+	require.ErrorIs(t, err, context.Canceled)
+
+	mu.Lock()
+	times := append([]time.Time(nil), requestTimes...)
+	mu.Unlock()
+
+	require.Len(t, times, 3)
+	assert.GreaterOrEqual(t, times[1].Sub(times[0]), 15*time.Millisecond)
+	assert.GreaterOrEqual(t, times[2].Sub(times[1]), 30*time.Millisecond)
 }
