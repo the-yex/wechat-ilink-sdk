@@ -92,13 +92,14 @@ type SessionService interface {
 }
 
 // ContextTokenService handles context token management.
+// Single-account design: key is userID only.
 type ContextTokenService interface {
-	// Get retrieves a context token.
-	Get(accountID, userID string) string
+	// Get retrieves a context token for a user.
+	Get(userID string) string
 
-	// Set stores a context token.
-	Set(accountID, userID, token string)
+	// Set stores a context token for a user.
+	Set(userID, token string)
 
-	// Delete removes a context token.
-	Delete(accountID, userID string)
+	// Delete removes a context token for a user.
+	Delete(userID string)
 }
