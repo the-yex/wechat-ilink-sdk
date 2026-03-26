@@ -54,6 +54,7 @@ type Client struct {
 	mu        sync.Mutex
 	running   bool
 	stopChan  chan struct{}
+	runDone   chan struct{}
 	closeOnce sync.Once
 
 	// Login state (atomic for thread-safe access without locks)
@@ -228,16 +229,23 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 	}
 
 	c.mu.Lock()
+	if c.closed.Load() {
+		c.mu.Unlock()
+		return c.ensureOpen("run")
+	}
 	if c.running {
 		c.mu.Unlock()
 		return fmt.Errorf("client is already running")
 	}
+	runDone := make(chan struct{})
+	c.runDone = runDone
 	c.running = true
 	c.mu.Unlock()
 	connected := false
 	defer func() {
 		c.mu.Lock()
 		c.running = false
+		c.runDone = nil
 		c.mu.Unlock()
 		if connected {
 			c.events.Dispatch(context.Background(), &event.Event{
@@ -245,6 +253,7 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 				Context: context.Background(),
 			})
 		}
+		close(runDone)
 	}()
 
 	// Auto-login if not already logged in
@@ -725,17 +734,23 @@ func (c *Client) Events() *event.Dispatcher { return c.events }
 // Close stops the client and releases resources.
 // After Close returns, active operations such as Run, Login, Send*, UploadMedia,
 // DownloadMedia, Logout, and plugin registration will return ErrClientClosed.
+// Close waits for the Run loop to exit and for in-flight event handlers to finish.
 // It is safe to call Close multiple times.
 func (c *Client) Close() error {
 	c.closeOnce.Do(func() {
 		c.closed.Store(true)
+		var runDone chan struct{}
 		c.mu.Lock()
-		defer c.mu.Unlock()
-
 		if c.running {
 			close(c.stopChan)
-			c.running = false
+			runDone = c.runDone
 		}
+		c.mu.Unlock()
+
+		if runDone != nil {
+			<-runDone
+		}
+		c.events.Close()
 	})
 	return nil
 }

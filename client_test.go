@@ -271,3 +271,55 @@ func TestNewClient_WiresInjectedHTTPClients(t *testing.T) {
 	assert.Equal(t, 1, longPollCalls)
 	assert.Equal(t, 1, cdnCalls)
 }
+
+func TestClose_WaitsForAsyncEventHandlers(t *testing.T) {
+	client, err := NewClient()
+	require.NoError(t, err)
+
+	client.SetToken("live-token", "", login.DefaultAccountID, "user-1")
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	runErr := make(chan error, 1)
+
+	client.Events().Subscribe(event.EventTypeDisconnected, func(ctx context.Context, e *event.Event) error {
+		close(started)
+		<-release
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	go func() {
+		runErr <- client.Run(ctx, nil)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected disconnected handler to start")
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		_ = client.Close()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+		t.Fatal("close returned before async event handler finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-closed:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected close to wait for async event handlers")
+	}
+
+	require.ErrorIs(t, <-runErr, context.Canceled)
+}
