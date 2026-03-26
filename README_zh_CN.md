@@ -5,7 +5,21 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/the-yex/wechat-ilink-sdk.svg)](https://pkg.go.dev/github.com/the-yex/wechat-ilink-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-基于 iLink 协议的专业、高度可扩展的微信机器人 Go SDK。
+> 🚀 **微信官方授权 Bot SDK** | 合法合规 · 开箱即用 · 生产就绪
+>
+> 基于 2026 年腾讯 OpenClaw 开放的 iLink 协议，这是微信**首个官方个人 Bot API**。
+
+**3 分钟上手，5 行代码运行：**
+
+```go
+client, _ := ilinksdk.NewClient(ilinksdk.WithTokenStore(tokenStore))
+client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    return client.SendText(ctx, msg.FromUserID, "收到: "+text)
+})
+client.Run(ctx, nil)  // 自动扫码登录，自动处理消息
+```
+
+---
 
 ## 关于 iLink 协议
 

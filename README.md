@@ -5,7 +5,21 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/the-yex/wechat-ilink-sdk.svg)](https://pkg.go.dev/github.com/the-yex/wechat-ilink-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A professional, highly extensible Go SDK for building WeChat bot applications based on the iLink protocol.
+> 🚀 **Official WeChat Bot SDK** | Legal & Safe · Ready to Use · Production Ready
+>
+> Based on iLink protocol released by Tencent OpenClaw in 2026 — WeChat's **first official personal Bot API**.
+
+**Get started in 3 minutes with 5 lines:**
+
+```go
+client, _ := ilinksdk.NewClient(ilinksdk.WithTokenStore(tokenStore))
+client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+    return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
+})
+client.Run(ctx, nil)  // Auto QR login, auto message handling
+```
+
+---
 
 ## About iLink Protocol
 
