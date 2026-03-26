@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,13 @@ const (
 	// UserAgent is the user agent string.
 	UserAgent = "wechat-bot-sdk-go/1.0"
 )
+
+// baseHeaders contains static headers shared across all requests.
+var baseHeaders = http.Header{
+	"Content-Type":      []string{"application/json"},
+	"AuthorizationType": []string{"ilink_bot_token"},
+	"User-Agent":        []string{UserAgent},
+}
 
 // ClientConfig holds the API client configuration.
 type ClientConfig struct {
@@ -129,12 +137,10 @@ func (*bytesConv) AppendUint(buf []byte, u uint32) []byte {
 
 // buildHeaders creates the HTTP headers for a request.
 func (c *Client) buildHeaders(bodyLen int) http.Header {
-	h := make(http.Header)
-	h.Set("Content-Type", "application/json")
-	h.Set("AuthorizationType", "ilink_bot_token")
-	h.Set("Content-Length", fmt.Sprintf("%d", bodyLen))
+	// Clone base headers to avoid modifying the shared template
+	h := baseHeaders.Clone()
+	h.Set("Content-Length", strconv.Itoa(bodyLen))
 	h.Set("X-WECHAT-UIN", randomWechatUin())
-	h.Set("User-Agent", UserAgent)
 	if c.config.Token != "" {
 		h.Set("Authorization", "Bearer "+c.config.Token)
 	}

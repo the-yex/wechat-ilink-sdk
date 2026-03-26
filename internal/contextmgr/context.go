@@ -1,21 +1,20 @@
 package contextmgr
 
 import (
-	"sync"
+	"github.com/the-yex/wechat-ilink-sdk/internal/t"
 )
 
 // ContextTokenManager manages context tokens for message replies.
 // Context tokens are required to send replies that are associated
 // with a conversation context.
 type ContextTokenManager struct {
-	mu    sync.RWMutex
-	store map[string]string // key: accountID:userID -> contextToken
+	store *t.Map[string, string] // key: accountID:userID -> contextToken
 }
 
 // NewContextTokenManager creates a new context token manager.
 func NewContextTokenManager() *ContextTokenManager {
 	return &ContextTokenManager{
-		store: make(map[string]string),
+		store: t.New[string, string](),
 	}
 }
 
@@ -29,28 +28,22 @@ func contextTokenKey(accountID, userID string) string {
 
 // Set stores a context token.
 func (m *ContextTokenManager) Set(accountID, userID, token string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.store[contextTokenKey(accountID, userID)] = token
+	m.store.Store(contextTokenKey(accountID, userID), token)
 }
 
 // Get retrieves a context token.
+// Returns empty string if not found.
 func (m *ContextTokenManager) Get(accountID, userID string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.store[contextTokenKey(accountID, userID)]
+	token, _ := m.store.Load(contextTokenKey(accountID, userID))
+	return token
 }
 
 // Delete removes a context token.
 func (m *ContextTokenManager) Delete(accountID, userID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.store, contextTokenKey(accountID, userID))
+	m.store.Delete(contextTokenKey(accountID, userID))
 }
 
 // Clear removes all context tokens.
 func (m *ContextTokenManager) Clear() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.store = make(map[string]string)
+	m.store = t.New[string, string]()
 }

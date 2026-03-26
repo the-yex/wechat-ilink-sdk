@@ -9,46 +9,48 @@ import (
 )
 
 // Registry manages registered plugins.
+// Uses a simple slice for optimal iteration performance (CPU cache friendly).
+// Plugin count is typically small (<10), so O(n) lookup is acceptable.
 type Registry struct {
-	mu          sync.RWMutex
-	plugins     map[string]Plugin
-	pluginOrder []string // Keep insertion order for deterministic iteration
-	sdk         SDK
+	mu      sync.RWMutex
+	plugins []Plugin
+	sdk     SDK
 }
 
 // NewRegistry creates a new plugin registry.
 func NewRegistry(sdk SDK) *Registry {
 	return &Registry{
-		plugins:     make(map[string]Plugin),
-		pluginOrder: make([]string, 0),
-		sdk:         sdk,
+		plugins: make([]Plugin, 0),
+		sdk:     sdk,
 	}
 }
 
 // Register adds a plugin to the registry.
+// Returns error if a plugin with the same name already exists.
 func (r *Registry) Register(p Plugin) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	name := p.Name()
-	if _, exists := r.plugins[name]; exists {
-		return fmt.Errorf("plugin %s already registered", name)
+	// Check for duplicate (O(n), but n is small)
+	for _, existing := range r.plugins {
+		if existing.Name() == name {
+			return fmt.Errorf("plugin %s already registered", name)
+		}
 	}
 
-	r.plugins[name] = p
-	r.pluginOrder = append(r.pluginOrder, name)
+	r.plugins = append(r.plugins, p)
 	return nil
 }
 
-// Initialize initializes all registered plugins.
+// Initialize initializes all registered plugins in registration order.
 func (r *Registry) Initialize(ctx context.Context) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, name := range r.pluginOrder {
-		p := r.plugins[name]
+	for _, p := range r.plugins {
 		if err := p.Initialize(ctx, r.sdk); err != nil {
-			return fmt.Errorf("initialize plugin %s: %w", name, err)
+			return fmt.Errorf("initialize plugin %s: %w", p.Name(), err)
 		}
 	}
 	return nil
@@ -59,8 +61,7 @@ func (r *Registry) OnMessage(ctx context.Context, msg *ilink.Message) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, name := range r.pluginOrder {
-		p := r.plugins[name]
+	for _, p := range r.plugins {
 		if err := p.OnMessage(ctx, msg); err != nil {
 			return err
 		}
@@ -73,19 +74,23 @@ func (r *Registry) OnError(ctx context.Context, err error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, name := range r.pluginOrder {
-		p := r.plugins[name]
+	for _, p := range r.plugins {
 		p.OnError(ctx, err)
 	}
 }
 
 // Get returns a plugin by name.
+// Returns nil, false if not found.
 func (r *Registry) Get(name string) (Plugin, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	p, ok := r.plugins[name]
-	return p, ok
+	for _, p := range r.plugins {
+		if p.Name() == name {
+			return p, true
+		}
+	}
+	return nil, false
 }
 
 // All returns all registered plugins.
@@ -93,9 +98,8 @@ func (r *Registry) All() []Plugin {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	plugins := make([]Plugin, 0, len(r.plugins))
-	for _, p := range r.plugins {
-		plugins = append(plugins, p)
-	}
-	return plugins
+	// Return a copy to prevent external modification
+	result := make([]Plugin, len(r.plugins))
+	copy(result, r.plugins)
+	return result
 }

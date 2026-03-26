@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/the-yex/wechat-ilink-sdk"
@@ -149,7 +150,7 @@ func (p *CommandPlugin) handleEcho(ctx context.Context, fromUserID string, args 
 		return p.sdk.SendText(ctx, fromUserID, "请提供要回显的消息：/echo <消息>")
 	}
 	// 拼接所有参数
-	message := joinStrings(args)
+	message := strings.Join(args, " ")
 	return p.sdk.SendText(ctx, fromUserID, message)
 }
 
@@ -195,18 +196,6 @@ func parseCommand(text string) (cmd string, args []string, ok bool) {
 	}
 
 	return cmd, args, true
-}
-
-// joinStrings 拼接字符串数组
-func joinStrings(strs []string) string {
-	result := ""
-	for i, s := range strs {
-		if i > 0 {
-			result += " "
-		}
-		result += s
-	}
-	return result
 }
 
 // ---------------------------------------------------------------------------

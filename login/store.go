@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/the-yex/wechat-ilink-sdk/internal/t"
 )
 
 // DefaultAccountID is the default account ID for single-account mode.
@@ -129,49 +131,45 @@ func (s *FileTokenStore) List() ([]string, error) {
 }
 
 // MemoryTokenStore implements TokenStore in memory.
+// Uses t.Map for thread-safe operations without locks.
 type MemoryTokenStore struct {
-	tokens map[string]*TokenInfo
-	mu     sync.RWMutex
+	tokens *t.Map[string, *TokenInfo]
 }
 
 // NewMemoryTokenStore creates a new in-memory token store.
 func NewMemoryTokenStore() *MemoryTokenStore {
 	return &MemoryTokenStore{
-		tokens: make(map[string]*TokenInfo),
+		tokens: t.New[string, *TokenInfo](),
 	}
 }
 
 // Save saves the token for an account.
 func (s *MemoryTokenStore) Save(accountID string, token *TokenInfo) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.tokens[accountID] = token
+	s.tokens.Store(accountID, token)
 	return nil
 }
 
 // Load loads the token for an account.
 func (s *MemoryTokenStore) Load(accountID string) (*TokenInfo, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.tokens[accountID], nil
+	token, ok := s.tokens.Load(accountID)
+	if !ok {
+		return nil, nil
+	}
+	return token, nil
 }
 
 // Delete removes the token for an account.
 func (s *MemoryTokenStore) Delete(accountID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.tokens, accountID)
+	s.tokens.Delete(accountID)
 	return nil
 }
 
 // List lists all stored account IDs.
 func (s *MemoryTokenStore) List() ([]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	accounts := make([]string, 0, len(s.tokens))
-	for id := range s.tokens {
-		accounts = append(accounts, id)
-	}
+	var accounts []string
+	s.tokens.Range(func(key string, _ *TokenInfo) bool {
+		accounts = append(accounts, key)
+		return true
+	})
 	return accounts, nil
 }

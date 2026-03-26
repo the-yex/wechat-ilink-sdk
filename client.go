@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk/event"
@@ -56,8 +57,9 @@ type Client struct {
 	stopChan  chan struct{}
 	closeOnce sync.Once
 
-	// Current user info (cached from login/token load)
-	currentUser *ilink.LoginResult
+	// Login state (atomic for thread-safe access without locks)
+	loggedIn    atomic.Bool
+	currentUser atomic.Pointer[ilink.LoginResult]
 }
 
 // NewClient creates a new WeChat Bot client with the given options.
@@ -176,15 +178,15 @@ func (c *Client) onTokenUpdate(token, baseURL, accountID, userID string) {
 	if baseURL != "" {
 		c.config.BaseURL = baseURL
 	}
-	c.config.Token = token // Update config token so IsLoggedIn() works
 
-	// Update current user info
-	c.currentUser = &ilink.LoginResult{
+	// Update current user info atomically
+	c.currentUser.Store(&ilink.LoginResult{
 		Token:     token,
 		AccountID: accountID,
 		UserID:    userID,
 		BaseURL:   baseURL,
-	}
+	})
+	c.loggedIn.Store(true)
 
 	// Update token on existing clients (preserves connection pool)
 	c.apiClient.SetToken(token)
@@ -200,9 +202,9 @@ func (c *Client) clearToken(ctx context.Context) {
 	} else if c.tokenStore != nil {
 		_ = c.tokenStore.Delete(login.DefaultAccountID)
 	}
-	// Reset login state
-	c.config.Token = ""
-	c.currentUser = nil
+	// Reset login state atomically
+	c.loggedIn.Store(false)
+	c.currentUser.Store(nil)
 }
 
 // Run starts the message polling loop and processes messages with the given handler.
@@ -293,6 +295,11 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 			GetUpdatesBuf: getUpdatesBuf,
 		})
 		if err != nil {
+			// Ignore context cancellation (normal shutdown)
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+
 			// Check if it's an authentication error (token expired)
 			if isAuthError(err) {
 				c.config.Logger.Warn("token expired, triggering re-login callback")
@@ -380,32 +387,38 @@ type MessageHandler func(ctx context.Context, msg *ilink.Message) error
 // This is useful when you want to handle all message types in one place.
 func (c *Client) OnMessage(handler MessageHandler) {
 	c.handlers.messageHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // OnText registers a handler for text messages.
 // If set, Run() will use it automatically when no explicit handler is passed.
 func (c *Client) OnText(handler TextHandler) {
 	c.handlers.textHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // OnImage registers a handler for image messages.
 func (c *Client) OnImage(handler ImageHandler) {
 	c.handlers.imageHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // OnVideo registers a handler for video messages.
 func (c *Client) OnVideo(handler VideoHandler) {
 	c.handlers.videoHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // OnVoice registers a handler for voice messages.
 func (c *Client) OnVoice(handler VoiceHandler) {
 	c.handlers.voiceHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // OnFile registers a handler for file messages.
 func (c *Client) OnFile(handler FileHandler) {
 	c.handlers.fileHandler = handler
+	c.handlers.cachedHandler = nil // Invalidate cache
 }
 
 // --- MessageService delegation ---
@@ -465,20 +478,21 @@ func (c *Client) DownloadMedia(ctx context.Context, req *media.DownloadRequest) 
 // The displayCallback is called with context and the QR code for display (only if scan is needed).
 func (c *Client) Login(ctx context.Context, displayCallback login.QRCodeCallback) (*ilink.LoginResult, error) {
 	// If already logged in with a valid token, verify it's still valid
-	if c.IsLoggedIn() && c.currentUser != nil {
+	user := c.currentUser.Load()
+	if c.IsLoggedIn() && user != nil {
 		c.config.Logger.Debug("verifying stored token")
 
 		// Verify token by calling GetConfig API
 		resp, err := c.apiClient.GetConfig(ctx, &ilink.GetConfigRequest{
-			ILinkUserID:  c.currentUser.UserID,
-			ContextToken: c.currentUser.Token,
+			ILinkUserID:  user.UserID,
+			ContextToken: user.Token,
 			BaseInfo: ilink.BaseInfo{
 				ChannelVersion: Version,
 			},
 		})
 		if err == nil && resp != nil && resp.ErrCode == 0 {
 			c.config.Logger.Debug("token is valid, skipping QR code scan")
-			return c.currentUser, nil
+			return user, nil
 		}
 
 		// Token invalid, log the reason
@@ -602,12 +616,12 @@ func (c *Client) Session() service.SessionService { return c.session }
 
 // IsLoggedIn returns true if a token is configured.
 func (c *Client) IsLoggedIn() bool {
-	return c.config.Token != ""
+	return c.loggedIn.Load()
 }
 
 // CurrentUser returns the current logged-in user info.
 func (c *Client) CurrentUser() *ilink.LoginResult {
-	return c.currentUser
+	return c.currentUser.Load()
 }
 
 // Events returns the event dispatcher for subscribing to SDK events.
