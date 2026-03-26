@@ -22,9 +22,8 @@ type VoiceHandler func(ctx context.Context, msg *ilink.Message, item *types.Voic
 // FileHandler handles file messages.
 type FileHandler func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error
 
-// MessageRouter routes messages to handlers based on message type.
-// This provides a cleaner API for handling different message types.
-type MessageRouter struct {
+// messageHandlers holds handlers for different message types.
+type messageHandlers struct {
 	textHandler  TextHandler
 	imageHandler ImageHandler
 	videoHandler VideoHandler
@@ -32,43 +31,13 @@ type MessageRouter struct {
 	fileHandler  FileHandler
 }
 
-// NewMessageRouter creates a new message router.
-func NewMessageRouter() *MessageRouter {
-	return &MessageRouter{}
+// hasAnyHandler returns true if any type handler is registered.
+func (h *messageHandlers) hasAnyHandler() bool {
+	return h.textHandler != nil || h.imageHandler != nil || h.videoHandler != nil || h.voiceHandler != nil || h.fileHandler != nil
 }
 
-// OnText registers a handler for text messages.
-func (r *MessageRouter) OnText(handler TextHandler) *MessageRouter {
-	r.textHandler = handler
-	return r
-}
-
-// OnImage registers a handler for image messages.
-func (r *MessageRouter) OnImage(handler ImageHandler) *MessageRouter {
-	r.imageHandler = handler
-	return r
-}
-
-// OnVideo registers a handler for video messages.
-func (r *MessageRouter) OnVideo(handler VideoHandler) *MessageRouter {
-	r.videoHandler = handler
-	return r
-}
-
-// OnVoice registers a handler for voice messages.
-func (r *MessageRouter) OnVoice(handler VoiceHandler) *MessageRouter {
-	r.voiceHandler = handler
-	return r
-}
-
-// OnFile registers a handler for file messages.
-func (r *MessageRouter) OnFile(handler FileHandler) *MessageRouter {
-	r.fileHandler = handler
-	return r
-}
-
-// Handler returns a MessageHandler that can be passed to client.Run().
-func (r *MessageRouter) Handler() MessageHandler {
+// buildHandler creates a MessageHandler from the registered type handlers.
+func (h *messageHandlers) buildHandler() MessageHandler {
 	return func(ctx context.Context, msg *ilink.Message) error {
 		// Only handle user messages
 		if !msg.IsFromUser() {
@@ -79,36 +48,36 @@ func (r *MessageRouter) Handler() MessageHandler {
 		for _, item := range msg.ItemList {
 			switch item.Type {
 			case types.MessageItemTypeText:
-				if r.textHandler != nil && item.TextItem != nil {
-					if err := r.textHandler(ctx, msg, item.TextItem.Text); err != nil {
+				if h.textHandler != nil && item.TextItem != nil {
+					if err := h.textHandler(ctx, msg, item.TextItem.Text); err != nil {
 						return err
 					}
 				}
 
 			case types.MessageItemTypeImage:
-				if r.imageHandler != nil && item.ImageItem != nil {
-					if err := r.imageHandler(ctx, msg, item.ImageItem); err != nil {
+				if h.imageHandler != nil && item.ImageItem != nil {
+					if err := h.imageHandler(ctx, msg, item.ImageItem); err != nil {
 						return err
 					}
 				}
 
 			case types.MessageItemTypeVideo:
-				if r.videoHandler != nil && item.VideoItem != nil {
-					if err := r.videoHandler(ctx, msg, item.VideoItem); err != nil {
+				if h.videoHandler != nil && item.VideoItem != nil {
+					if err := h.videoHandler(ctx, msg, item.VideoItem); err != nil {
 						return err
 					}
 				}
 
 			case types.MessageItemTypeVoice:
-				if r.voiceHandler != nil && item.VoiceItem != nil {
-					if err := r.voiceHandler(ctx, msg, item.VoiceItem); err != nil {
+				if h.voiceHandler != nil && item.VoiceItem != nil {
+					if err := h.voiceHandler(ctx, msg, item.VoiceItem); err != nil {
 						return err
 					}
 				}
 
 			case types.MessageItemTypeFile:
-				if r.fileHandler != nil && item.FileItem != nil {
-					if err := r.fileHandler(ctx, msg, item.FileItem); err != nil {
+				if h.fileHandler != nil && item.FileItem != nil {
+					if err := h.fileHandler(ctx, msg, item.FileItem); err != nil {
 						return err
 					}
 				}

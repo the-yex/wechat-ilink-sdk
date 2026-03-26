@@ -47,6 +47,7 @@ type Client struct {
 	plugins    *plugin.Registry
 	middleware []middleware.Middleware
 	events     *event.Dispatcher
+	handlers   *messageHandlers
 
 	// Polling state
 	mu       sync.Mutex
@@ -98,6 +99,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		tokenStore:    tokenStore,
 		middleware:    cfg.Middleware,
 		events:        event.NewDispatcher(),
+		handlers:      &messageHandlers{},
 		stopChan:      make(chan struct{}),
 	}
 
@@ -368,6 +370,12 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 					c.plugins.OnError(ctx, err)
 					c.config.Logger.Error("handler error", "error", err)
 				}
+			} else if c.handlers.hasAnyHandler() {
+				// Use type-specific handlers if registered
+				if err := c.handlers.buildHandler()(ctx, msg); err != nil {
+					c.plugins.OnError(ctx, err)
+					c.config.Logger.Error("handler error", "error", err)
+				}
 			}
 		}
 	}
@@ -375,6 +383,34 @@ func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
 
 // MessageHandler handles received messages.
 type MessageHandler func(ctx context.Context, msg *ilink.Message) error
+
+// --- Type-specific message handlers ---
+
+// OnText registers a handler for text messages.
+// If set, Run() will use it automatically when no explicit handler is passed.
+func (c *Client) OnText(handler TextHandler) {
+	c.handlers.textHandler = handler
+}
+
+// OnImage registers a handler for image messages.
+func (c *Client) OnImage(handler ImageHandler) {
+	c.handlers.imageHandler = handler
+}
+
+// OnVideo registers a handler for video messages.
+func (c *Client) OnVideo(handler VideoHandler) {
+	c.handlers.videoHandler = handler
+}
+
+// OnVoice registers a handler for voice messages.
+func (c *Client) OnVoice(handler VoiceHandler) {
+	c.handlers.voiceHandler = handler
+}
+
+// OnFile registers a handler for file messages.
+func (c *Client) OnFile(handler FileHandler) {
+	c.handlers.fileHandler = handler
+}
 
 // --- MessageService delegation ---
 

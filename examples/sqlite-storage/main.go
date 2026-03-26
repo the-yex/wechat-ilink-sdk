@@ -137,17 +137,13 @@ func main() {
 	}
 	defer client.Close()
 
-	// Create message router - each message type has its own handler
-	router := ilinksdk.NewMessageRouter()
-
-	// Handle text messages
-	router.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+	// Register message handlers - each type has its own handler
+	client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
 		fmt.Printf("收到文本消息: from=%s, content=%s\n", msg.FromUserID, text)
 		return client.SendText(ctx, msg.FromUserID, "收到: "+text)
 	})
 
-	// Handle image messages
-	router.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
+	client.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
 		fmt.Printf("收到图片消息: from=%s\n", msg.FromUserID)
 		if item.Media != nil {
 			imageData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
@@ -164,8 +160,7 @@ func main() {
 		return client.SendText(ctx, msg.FromUserID, "收到图片(无法下载)")
 	})
 
-	// Handle voice messages
-	router.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
+	client.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
 		fmt.Printf("收到语音消息: from=%s\n", msg.FromUserID)
 		// Voice sending is not stable, just acknowledge receipt
 		if item.Text != "" {
@@ -174,8 +169,7 @@ func main() {
 		return client.SendText(ctx, msg.FromUserID, "收到语音消息")
 	})
 
-	// Handle video messages
-	router.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
+	client.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
 		fmt.Printf("收到视频消息: from=%s\n", msg.FromUserID)
 		if item.Media != nil {
 			videoData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
@@ -192,8 +186,7 @@ func main() {
 		return client.SendText(ctx, msg.FromUserID, "收到视频(无法下载)")
 	})
 
-	// Handle file messages
-	router.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
+	client.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
 		fmt.Printf("收到文件消息: from=%s\n", msg.FromUserID)
 		if item.Media != nil {
 			fileData, err := client.DownloadMedia(ctx, &media.DownloadRequest{
@@ -214,9 +207,9 @@ func main() {
 		return client.SendText(ctx, msg.FromUserID, "收到文件(无法下载)")
 	})
 
-	// Run the bot with the router
+	// Run the bot (no need to pass handler, OnText etc. are used)
 	fmt.Println("启动机器人...")
-	if err := client.Run(ctx, router.Handler()); err != nil && err != context.Canceled {
+	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {
 		slog.Error("运行错误", "error", err)
 	}
 

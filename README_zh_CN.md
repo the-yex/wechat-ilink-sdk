@@ -133,19 +133,17 @@ client.SendTyping(ctx, toUserID, false) // 停止输入
 
 ## 接收消息
 
-### 方式一：使用 MessageRouter（推荐）
+### 方式一：按类型注册 Handler（推荐）
 
-按消息类型分开处理，代码更清晰：
+代码更清晰，每种消息类型独立处理：
 
 ```go
-router := ilinksdk.NewMessageRouter()
-
-router.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
     fmt.Printf("收到文本: %s\n", text)
     return client.SendText(ctx, msg.FromUserID, "收到: "+text)
 })
 
-router.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
+client.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageItem) error {
     fmt.Printf("收到图片\n")
     // 下载并回复图片
     data, _ := client.DownloadMedia(ctx, &media.DownloadRequest{
@@ -155,23 +153,23 @@ router.OnImage(func(ctx context.Context, msg *ilink.Message, item *types.ImageIt
     return client.SendImage(ctx, msg.FromUserID, data)
 })
 
-router.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
+client.OnVideo(func(ctx context.Context, msg *ilink.Message, item *types.VideoItem) error {
     fmt.Printf("收到视频\n")
     return nil
 })
 
-router.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
+client.OnVoice(func(ctx context.Context, msg *ilink.Message, item *types.VoiceItem) error {
     fmt.Printf("收到语音: %s\n", item.Text)
     return nil
 })
 
-router.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
+client.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem) error {
     fmt.Printf("收到文件: %s\n", item.FileName)
     return nil
 })
 
-// 运行机器人
-client.Run(ctx, router.Handler())
+// 运行机器人（无需传 handler，自动使用上面注册的）
+client.Run(ctx, nil)
 ```
 
 ### 方式二：统一处理器
