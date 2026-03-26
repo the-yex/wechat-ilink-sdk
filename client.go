@@ -386,6 +386,13 @@ type MessageHandler func(ctx context.Context, msg *ilink.Message) error
 
 // --- Type-specific message handlers ---
 
+// OnMessage registers a general message handler.
+// If set, Run() will use it automatically when no explicit handler is passed.
+// This is useful when you want to handle all message types in one place.
+func (c *Client) OnMessage(handler MessageHandler) {
+	c.handlers.messageHandler = handler
+}
+
 // OnText registers a handler for text messages.
 // If set, Run() will use it automatically when no explicit handler is passed.
 func (c *Client) OnText(handler TextHandler) {
@@ -615,50 +622,12 @@ func (c *Client) CurrentUser() *ilink.LoginResult {
 //
 // Example:
 //
-//	client.Events().Subscribe(event.EventTypeMessage, func(ctx context.Context, e *event.Event) error {
-//	    msg := e.Data.(*ilink.Message)
-//	    log.Printf("收到消息: %v", msg)
+//	client.Events().Subscribe(event.EventTypeLogin, func(ctx context.Context, e *event.Event) error {
+//	    result := e.Data.(*ilink.LoginResult)
+//	    log.Printf("登录成功: %s", result.UserID)
 //	    return nil
 //	})
 func (c *Client) Events() *event.Dispatcher { return c.events }
-
-// --- Convenience event subscription methods ---
-
-// OnMessage registers a handler for message events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeMessage, handler).
-func (c *Client) OnMessage(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeMessage, handler)
-}
-
-// OnError registers a handler for error events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeError, handler).
-func (c *Client) OnError(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeError, handler)
-}
-
-// OnLogin registers a handler for login events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeLogin, handler).
-func (c *Client) OnLogin(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeLogin, handler)
-}
-
-// OnSessionExpired registers a handler for session expired events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeSessionExpired, handler).
-func (c *Client) OnSessionExpired(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeSessionExpired, handler)
-}
-
-// OnConnected registers a handler for connected events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeConnected, handler).
-func (c *Client) OnConnected(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeConnected, handler)
-}
-
-// OnDisconnected registers a handler for disconnected events.
-// This is a convenience method equivalent to Events().Subscribe(event.EventTypeDisconnected, handler).
-func (c *Client) OnDisconnected(handler event.Handler) {
-	c.events.Subscribe(event.EventTypeDisconnected, handler)
-}
 
 // --- Utility methods ---
 

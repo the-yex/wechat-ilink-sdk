@@ -24,20 +24,27 @@ type FileHandler func(ctx context.Context, msg *ilink.Message, item *types.FileI
 
 // messageHandlers holds handlers for different message types.
 type messageHandlers struct {
-	textHandler  TextHandler
-	imageHandler ImageHandler
-	videoHandler VideoHandler
-	voiceHandler VoiceHandler
-	fileHandler  FileHandler
+	messageHandler MessageHandler
+	textHandler    TextHandler
+	imageHandler   ImageHandler
+	videoHandler   VideoHandler
+	voiceHandler   VoiceHandler
+	fileHandler    FileHandler
 }
 
 // hasAnyHandler returns true if any type handler is registered.
 func (h *messageHandlers) hasAnyHandler() bool {
-	return h.textHandler != nil || h.imageHandler != nil || h.videoHandler != nil || h.voiceHandler != nil || h.fileHandler != nil
+	return h.messageHandler != nil || h.textHandler != nil || h.imageHandler != nil || h.videoHandler != nil || h.voiceHandler != nil || h.fileHandler != nil
 }
 
 // buildHandler creates a MessageHandler from the registered type handlers.
 func (h *messageHandlers) buildHandler() MessageHandler {
+	// If a general message handler is set, use it
+	if h.messageHandler != nil {
+		return h.messageHandler
+	}
+
+	// Otherwise, build from type-specific handlers
 	return func(ctx context.Context, msg *ilink.Message) error {
 		// Only handle user messages
 		if !msg.IsFromUser() {

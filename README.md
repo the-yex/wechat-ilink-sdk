@@ -174,22 +174,35 @@ client.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem
 client.Run(ctx, nil)
 ```
 
-### Option 2: Unified Handler
+### Option 2: General Message Handler
 
-Suitable for simple scenarios:
+For scenarios where you want to handle all message types in one place:
 
 ```go
-client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
+client.OnMessage(func(ctx context.Context, msg *ilink.Message) error {
     if !msg.IsFromUser() {
-        return nil // Ignore non-user messages
+        return nil
     }
 
+    // Check msg.ItemList to determine message type
     if text := msg.GetText(); text != "" {
         return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
     }
 
-    if item := msg.GetFirstMediaItem(); item != nil {
-        // Handle media messages...
+    return nil
+})
+
+client.Run(ctx, nil)
+```
+
+### Option 3: Pass to Run() Directly
+
+Simplest approach:
+
+```go
+client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
+    if text := msg.GetText(); text != "" {
+        return client.SendText(ctx, msg.FromUserID, "Echo: "+text)
     }
     return nil
 })

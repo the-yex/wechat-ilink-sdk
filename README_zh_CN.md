@@ -172,22 +172,35 @@ client.OnFile(func(ctx context.Context, msg *ilink.Message, item *types.FileItem
 client.Run(ctx, nil)
 ```
 
-### 方式二：统一处理器
+### 方式二：通用消息处理器
 
-适合简单场景：
+适合需要统一处理所有消息类型的场景：
 
 ```go
-client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
+client.OnMessage(func(ctx context.Context, msg *ilink.Message) error {
     if !msg.IsFromUser() {
-        return nil // 忽略非用户消息
+        return nil
     }
 
+    // 根据 msg.ItemList 判断消息类型并处理
     if text := msg.GetText(); text != "" {
         return client.SendText(ctx, msg.FromUserID, "收到: "+text)
     }
 
-    if item := msg.GetFirstMediaItem(); item != nil {
-        // 处理媒体消息...
+    return nil
+})
+
+client.Run(ctx, nil)
+```
+
+### 方式三：直接传给 Run()
+
+最简单的方式：
+
+```go
+client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
+    if text := msg.GetText(); text != "" {
+        return client.SendText(ctx, msg.FromUserID, "收到: "+text)
     }
     return nil
 })
