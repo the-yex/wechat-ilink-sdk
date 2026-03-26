@@ -30,6 +30,8 @@ type messageHandlers struct {
 	videoHandler   VideoHandler
 	voiceHandler   VoiceHandler
 	fileHandler    FileHandler
+
+	cachedHandler MessageHandler // Cached handler to avoid recreating closures
 }
 
 // hasAnyHandler returns true if any type handler is registered.
@@ -38,14 +40,21 @@ func (h *messageHandlers) hasAnyHandler() bool {
 }
 
 // buildHandler creates a MessageHandler from the registered type handlers.
+// The handler is cached after first build to avoid recreating closures.
 func (h *messageHandlers) buildHandler() MessageHandler {
-	// If a general message handler is set, use it
-	if h.messageHandler != nil {
-		return h.messageHandler
+	// Return cached handler if available
+	if h.cachedHandler != nil {
+		return h.cachedHandler
 	}
 
-	// Otherwise, build from type-specific handlers
-	return func(ctx context.Context, msg *ilink.Message) error {
+	// If a general message handler is set, use it
+	if h.messageHandler != nil {
+		h.cachedHandler = h.messageHandler
+		return h.cachedHandler
+	}
+
+	// Build from type-specific handlers and cache it
+	h.cachedHandler = func(ctx context.Context, msg *ilink.Message) error {
 		// Only handle user messages
 		if !msg.IsFromUser() {
 			return nil
@@ -93,4 +102,6 @@ func (h *messageHandlers) buildHandler() MessageHandler {
 
 		return nil
 	}
+
+	return h.cachedHandler
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 )
@@ -126,5 +127,5 @@ func GenerateFileKey() (string, error) {
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return "", fmt.Errorf("generate file key: %w", err)
 	}
-	return fmt.Sprintf("%x", key), nil
+	return hex.EncodeToString(key), nil
 }

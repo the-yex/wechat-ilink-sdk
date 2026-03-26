@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,6 +78,12 @@ func (c *Client) SetVersion(v string) {
 	c.version = v
 }
 
+// SetToken updates the authentication token without recreating the client.
+// This preserves the HTTP connection pool and avoids unnecessary allocations.
+func (c *Client) SetToken(token string) {
+	c.config.Token = token
+}
+
 // buildBaseInfo creates the base_info for requests.
 func (c *Client) buildBaseInfo() BaseInfo {
 	return BaseInfo{ChannelVersion: c.version}
@@ -84,11 +91,40 @@ func (c *Client) buildBaseInfo() BaseInfo {
 
 // randomWechatUin generates a random X-WECHAT-UIN header value.
 func randomWechatUin() string {
-	b := make([]byte, 4)
-	rand.Read(b)
-	// Convert to uint32 then to string, then base64 encode
-	u := uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
-	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", u)))
+	var b [4]byte
+	rand.Read(b[:])
+	u := binary.BigEndian.Uint32(b[:])
+	// Use a small buffer to avoid heap allocation
+	var buf [20]byte // uint32 max is 4294967295 (10 digits)
+	n := bytesconv.AppendUint(buf[:0], u)
+	return base64.StdEncoding.EncodeToString(n)
+}
+
+// bytesconv provides efficient byte conversion utilities.
+var bytesconv = newBytesConv()
+
+type bytesConv struct{}
+
+func newBytesConv() *bytesConv { return &bytesConv{} }
+
+// AppendUint appends the decimal representation of u to buf and returns the extended buffer.
+func (*bytesConv) AppendUint(buf []byte, u uint32) []byte {
+	if u == 0 {
+		return append(buf, '0')
+	}
+	// Build digits in reverse order
+	var digits [10]byte
+	n := 0
+	for u > 0 {
+		digits[n] = byte('0' + u%10)
+		u /= 10
+		n++
+	}
+	// Reverse into buf
+	for i := n - 1; i >= 0; i-- {
+		buf = append(buf, digits[i])
+	}
+	return buf
 }
 
 // buildHeaders creates the HTTP headers for a request.

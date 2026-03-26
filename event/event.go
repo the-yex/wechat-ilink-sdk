@@ -3,6 +3,7 @@ package event
 
 import (
 	"context"
+	"log"
 	"sync"
 )
 
@@ -59,16 +60,24 @@ func (d *Dispatcher) Unsubscribe(eventType EventType) {
 
 // Dispatch dispatches an event to all registered handlers.
 // Handlers are called asynchronously to avoid blocking.
+// Panics in handlers are recovered and logged.
 func (d *Dispatcher) Dispatch(ctx context.Context, event *Event) {
 	d.mu.RLock()
 	handlers := make([]Handler, len(d.handlers[event.Type]))
 	copy(handlers, d.handlers[event.Type])
 	d.mu.RUnlock()
 
-	// Call handlers asynchronously
+	// Call handlers asynchronously with panic recovery
 	for _, h := range handlers {
 		go func(handler Handler) {
-			_ = handler(ctx, event)
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[event] handler panic recovered: %v", r)
+				}
+			}()
+			if err := handler(ctx, event); err != nil {
+				log.Printf("[event] handler error: %v", err)
+			}
 		}(h)
 	}
 }

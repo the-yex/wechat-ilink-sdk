@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+const (
+	// MaxDownloadSize is the maximum allowed download size (100MB).
+	MaxDownloadSize = 100 * 1024 * 1024
+)
+
 // DownloadRequest represents a media download request.
 type DownloadRequest struct {
 	EncryptQueryParam string // CDN encrypted query parameter
@@ -44,12 +49,12 @@ func (c *Client) Download(ctx context.Context, req *DownloadRequest) ([]byte, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, &CDNError{StatusCode: resp.StatusCode, Message: string(body)}
 	}
 
-	// Read encrypted data
-	encrypted, err := io.ReadAll(resp.Body)
+	// Read encrypted data with size limit to prevent OOM
+	encrypted, err := io.ReadAll(io.LimitReader(resp.Body, MaxDownloadSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -81,11 +86,11 @@ func (c *Client) DownloadPlain(ctx context.Context, encryptQueryParam string) ([
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, &CDNError{StatusCode: resp.StatusCode, Message: string(body)}
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, MaxDownloadSize))
 }
 
 // parseAESKey parses an AES key from base64 or hex encoding.

@@ -2,6 +2,7 @@ package ilinksdk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -50,9 +51,10 @@ type Client struct {
 	handlers   *messageHandlers
 
 	// Polling state
-	mu       sync.Mutex
-	running  bool
-	stopChan chan struct{}
+	mu        sync.Mutex
+	running   bool
+	stopChan  chan struct{}
+	closeOnce sync.Once
 
 	// Current user info (cached from login/token load)
 	currentUser *ilink.LoginResult
@@ -169,7 +171,7 @@ func NewClient(opts ...Option) (*Client, error) {
 }
 
 // onTokenUpdate handles token updates from AuthService.
-// It recreates the apiClient and cdnClient with the new token.
+// It updates the token without recreating clients to preserve connection pools.
 func (c *Client) onTokenUpdate(token, baseURL, accountID, userID string) {
 	if baseURL != "" {
 		c.config.BaseURL = baseURL
@@ -184,21 +186,8 @@ func (c *Client) onTokenUpdate(token, baseURL, accountID, userID string) {
 		BaseURL:   baseURL,
 	}
 
-	// Recreate API client with new token
-	c.apiClient = ilink.NewClient(ilink.ClientConfig{
-		BaseURL:         c.config.BaseURL,
-		Token:           token,
-		Timeout:         c.config.Timeout,
-		LongPollTimeout: c.config.LongPollTimeout,
-	})
-
-	// Update CDN client reference
-	c.cdnClient = media.NewClient(c.config.CDNBaseURL, c.apiClient)
-
-	// Update services with new clients
-	c.messages = service.NewMessageService(c.apiClient, c.cdnClient, c.contextTokens, c.middleware)
-	c.media = service.NewMediaService(c.cdnClient)
-	c.session = service.NewSessionService(c.apiClient)
+	// Update token on existing clients (preserves connection pool)
+	c.apiClient.SetToken(token)
 }
 
 // clearToken clears the stored token.
@@ -635,14 +624,17 @@ func (c *Client) Events() *event.Dispatcher { return c.events }
 // --- Utility methods ---
 
 // Close stops the client and releases resources.
+// It is safe to call Close multiple times.
 func (c *Client) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 
-	if c.running {
-		close(c.stopChan)
-		c.running = false
-	}
+		if c.running {
+			close(c.stopChan)
+			c.running = false
+		}
+	})
 	return nil
 }
 
@@ -656,6 +648,14 @@ func isAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
+
+	// Check if it's an APIError with auth-related code
+	var apiErr *ilink.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == 401 || apiErr.Code == ilink.SessionExpiredErrCode
+	}
+
+	// Fallback to string matching for non-API errors
 	errStr := err.Error()
 	return strings.Contains(errStr, "401") ||
 		strings.Contains(errStr, "unauthorized") ||
