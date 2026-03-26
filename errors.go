@@ -20,6 +20,9 @@ var (
 	// ErrSessionPaused indicates API calls are paused due to session expiry.
 	ErrSessionPaused = errors.New("session is paused, please wait")
 
+	// ErrClientClosed indicates the client has been closed and can no longer perform active operations.
+	ErrClientClosed = errors.New("client is closed")
+
 	// ErrAuthenticationFailed indicates the request failed due to invalid or missing authentication.
 	ErrAuthenticationFailed = errors.New("authentication failed")
 

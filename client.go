@@ -57,6 +57,7 @@ type Client struct {
 	closeOnce sync.Once
 
 	// Login state (atomic for thread-safe access without locks)
+	closed      atomic.Bool
 	loggedIn    atomic.Bool
 	currentUser atomic.Pointer[ilink.LoginResult]
 }
@@ -220,6 +221,10 @@ func (c *Client) clearToken(ctx context.Context) {
 // If not already logged in and OnLogin callback is set, Run will automatically
 // trigger the login flow before starting the message loop.
 func (c *Client) Run(ctx context.Context, handler MessageHandler) error {
+	if err := c.ensureOpen("run"); err != nil {
+		return err
+	}
+
 	c.mu.Lock()
 	if c.running {
 		c.mu.Unlock()
@@ -450,37 +455,58 @@ func (c *Client) OnFile(handler FileHandler) {
 
 // SendMessage sends a message.
 func (c *Client) SendMessage(ctx context.Context, req *ilink.SendMessageRequest) error {
+	if err := c.ensureOpen("send message"); err != nil {
+		return err
+	}
 	return wrapError("send message", c.messages.SendMessage(ctx, req), nil)
 }
 
 // SendText sends a text message.
 func (c *Client) SendText(ctx context.Context, toUserID, text string) error {
+	if err := c.ensureOpen("send text"); err != nil {
+		return err
+	}
 	return wrapError("send text", c.messages.SendText(ctx, toUserID, text), nil)
 }
 
 // SendImage sends an image message.
 func (c *Client) SendImage(ctx context.Context, toUserID string, imageData []byte) error {
+	if err := c.ensureOpen("send image"); err != nil {
+		return err
+	}
 	return wrapError("send image", c.messages.SendImage(ctx, toUserID, imageData), ErrUploadFailed)
 }
 
 // SendVideo sends a video message.
 func (c *Client) SendVideo(ctx context.Context, toUserID string, videoData []byte) error {
+	if err := c.ensureOpen("send video"); err != nil {
+		return err
+	}
 	return wrapError("send video", c.messages.SendVideo(ctx, toUserID, videoData), ErrUploadFailed)
 }
 
 // SendVoice sends a voice message.
 // voiceItem should contain playtime, encode_type, bits_per_sample, sample_rate from the original message.
 func (c *Client) SendVoice(ctx context.Context, toUserID string, voiceData []byte, voiceItem *ilink.VoiceItem) error {
+	if err := c.ensureOpen("send voice"); err != nil {
+		return err
+	}
 	return wrapError("send voice", c.messages.SendVoice(ctx, toUserID, voiceData, voiceItem), ErrUploadFailed)
 }
 
 // SendFile sends a file message.
 func (c *Client) SendFile(ctx context.Context, toUserID, fileName string, fileData []byte) error {
+	if err := c.ensureOpen("send file"); err != nil {
+		return err
+	}
 	return wrapError("send file", c.messages.SendFile(ctx, toUserID, fileName, fileData), ErrUploadFailed)
 }
 
 // SendTyping sends a typing indicator.
 func (c *Client) SendTyping(ctx context.Context, toUserID string, typing bool) error {
+	if err := c.ensureOpen("send typing"); err != nil {
+		return err
+	}
 	return wrapError("send typing", c.messages.SendTyping(ctx, toUserID, typing), nil)
 }
 
@@ -488,12 +514,18 @@ func (c *Client) SendTyping(ctx context.Context, toUserID string, typing bool) e
 
 // UploadMedia uploads a media file to CDN.
 func (c *Client) UploadMedia(ctx context.Context, req *media.UploadRequest) (*media.UploadResult, error) {
+	if err := c.ensureOpen("upload media"); err != nil {
+		return nil, err
+	}
 	result, err := c.media.Upload(ctx, req)
 	return result, wrapError("upload media", err, ErrUploadFailed)
 }
 
 // DownloadMedia downloads and decrypts a media file from CDN.
 func (c *Client) DownloadMedia(ctx context.Context, req *media.DownloadRequest) ([]byte, error) {
+	if err := c.ensureOpen("download media"); err != nil {
+		return nil, err
+	}
 	data, err := c.media.Download(ctx, req)
 	return data, wrapError("download media", err, ErrDownloadFailed)
 }
@@ -504,6 +536,10 @@ func (c *Client) DownloadMedia(ctx context.Context, req *media.DownloadRequest) 
 // If a valid token is already stored, it returns the cached login result without QR code scan.
 // The displayCallback is called with context and the QR code for display (only if scan is needed).
 func (c *Client) Login(ctx context.Context, displayCallback login.QRCodeCallback) (*ilink.LoginResult, error) {
+	if err := c.ensureOpen("login"); err != nil {
+		return nil, err
+	}
+
 	// If already logged in with a valid token, verify it's still valid
 	user := c.currentUser.Load()
 	if c.IsLoggedIn() && user != nil {
@@ -561,11 +597,17 @@ func (c *Client) LoginSimple(ctx context.Context, displayCallback func(qr *login
 
 // SetToken sets the authentication token.
 func (c *Client) SetToken(token, baseURL, accountID, userID string) {
+	if c.closed.Load() {
+		return
+	}
 	c.auth.SetToken(token, baseURL, accountID, userID)
 }
 
 // LoadToken loads a stored token for an account.
 func (c *Client) LoadToken(accountID string) error {
+	if err := c.ensureOpen("load token"); err != nil {
+		return err
+	}
 	return wrapError("load token", c.auth.LoadToken(accountID), nil)
 }
 
@@ -573,6 +615,10 @@ func (c *Client) LoadToken(accountID string) error {
 // After calling this, the SDK will pause the current session and
 // trigger the OnSessionExpired callback, which by default shows a QR code for re-login.
 func (c *Client) Logout(ctx context.Context) error {
+	if err := c.ensureOpen("logout"); err != nil {
+		return err
+	}
+
 	// Clear stored token
 	c.clearToken(ctx)
 
@@ -601,6 +647,9 @@ func (c *Client) RemainingPause() time.Duration {
 
 // Use adds middleware to the client.
 func (c *Client) Use(m ...middleware.Middleware) {
+	if c.closed.Load() {
+		return
+	}
 	c.config.Middleware = append(c.config.Middleware, m...)
 	c.middleware = buildMiddleware(c.config)
 	// Update MessageService with new middleware
@@ -610,6 +659,9 @@ func (c *Client) Use(m ...middleware.Middleware) {
 // UsePlugin registers a plugin and initializes it.
 // The plugin's Initialize method is called synchronously.
 func (c *Client) UsePlugin(p plugin.Plugin) error {
+	if err := c.ensureOpen("register plugin"); err != nil {
+		return err
+	}
 	if err := c.plugins.Register(p); err != nil {
 		return wrapError("register plugin", err, nil)
 	}
@@ -625,6 +677,9 @@ func (c *Client) GetContextToken(userID string) string {
 
 // SetContextToken sets the context token for a user.
 func (c *Client) SetContextToken(userID, token string) {
+	if c.closed.Load() {
+		return
+	}
 	c.contextTokens.Set(userID, token)
 }
 
@@ -666,9 +721,12 @@ func (c *Client) Events() *event.Dispatcher { return c.events }
 // --- Utility methods ---
 
 // Close stops the client and releases resources.
+// After Close returns, active operations such as Run, Login, Send*, UploadMedia,
+// DownloadMedia, Logout, and plugin registration will return ErrClientClosed.
 // It is safe to call Close multiple times.
 func (c *Client) Close() error {
 	c.closeOnce.Do(func() {
+		c.closed.Store(true)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 
@@ -683,4 +741,15 @@ func (c *Client) Close() error {
 // Logger returns the configured logger.
 func (c *Client) Logger() *slog.Logger {
 	return c.config.Logger
+}
+
+func (c *Client) ensureOpen(op string) error {
+	if !c.closed.Load() {
+		return nil
+	}
+	return &Error{
+		Op:   op,
+		Kind: ErrClientClosed,
+		Err:  ErrClientClosed,
+	}
 }

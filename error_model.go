@@ -117,6 +117,8 @@ func classifyError(err error, fallback error) (kind error, temporary bool, code 
 	}
 
 	switch {
+	case errors.Is(err, ErrClientClosed):
+		return ErrClientClosed, false, 0
 	case errors.Is(err, ErrAuthenticationFailed):
 		return ErrAuthenticationFailed, false, 0
 	case errors.Is(err, ErrSessionExpired):

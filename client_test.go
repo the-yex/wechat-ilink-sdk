@@ -184,3 +184,23 @@ func TestRun_BacksOffAfterPollErrors(t *testing.T) {
 	assert.GreaterOrEqual(t, times[1].Sub(times[0]), 15*time.Millisecond)
 	assert.GreaterOrEqual(t, times[2].Sub(times[1]), 30*time.Millisecond)
 }
+
+func TestClose_MakesActiveOperationsFail(t *testing.T) {
+	client, err := NewClient()
+	require.NoError(t, err)
+
+	client.SetContextToken("user-1", "ctx-token")
+	require.NoError(t, client.Close())
+
+	err = client.Run(context.Background(), nil)
+	require.ErrorIs(t, err, ErrClientClosed)
+
+	err = client.SendText(context.Background(), "user-1", "hello")
+	require.ErrorIs(t, err, ErrClientClosed)
+
+	_, err = client.Login(context.Background(), nil)
+	require.ErrorIs(t, err, ErrClientClosed)
+
+	err = client.Logout(context.Background())
+	require.ErrorIs(t, err, ErrClientClosed)
+}
