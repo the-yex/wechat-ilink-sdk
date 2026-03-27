@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
@@ -35,13 +36,10 @@ func main() {
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithToken(token),
 		ilinksdk.WithLogger(logger),
+		ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+		ilinksdk.WithRateLimit(3, 1),
 		ilinksdk.WithMiddleware(
 			middleware.Logging(logger),
-			middleware.Retry(middleware.RetryConfig{
-				MaxAttempts: 3,
-				WaitMin:     1e9,  // 1 second
-				WaitMax:     5e9,  // 5 seconds
-			}),
 		),
 	)
 	if err != nil {

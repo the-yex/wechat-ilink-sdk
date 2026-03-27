@@ -494,11 +494,10 @@ Bot:  正在退出，请重新扫码登录...
 | 示例 | 描述 |
 |------|------|
 | `simple-login` | 基础扫码登录 |
-| `qrcode-login` | 登录 + Token 存储 |
-| `qrcode-login-with-image` | 完整机器人 + 自动回复 |
-| `auto-relogin` | 会话过期自动重登录 |
-| `sqlite-storage` | SQLite 存储用户信息 |
-| `basic-bot` | Echo 机器人 + 中间件 |
+| `qrcode-login` | 显式登录 + 单账号 Token 持久化 helper |
+| `basic-bot` | 带重试、限流、自定义 HTTP client 的生产风格 Echo 机器人 |
+| `auto-relogin` | 自定义会话过期回调与重登录流程 |
+| `sqlite-storage` | 基于 SQLite 的 TokenStore 示例 |
 | `event-demo` | 事件系统使用示例 |
 | `plugins` | 插件开发示例 |
 | `ai-assistant` | AI 助手集成模式 |

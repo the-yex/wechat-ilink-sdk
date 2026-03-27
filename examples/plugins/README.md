@@ -117,9 +117,11 @@ func (p *CommandPlugin) handleHelp(ctx context.Context, fromUserID string, args 
 ```go
 type AutoReplyPlugin struct {
     replies map[string]string
+    sdk     plugin.SDK
 }
 
 func (p *AutoReplyPlugin) Initialize(ctx context.Context, sdk plugin.SDK) error {
+    p.sdk = sdk
     p.AddReply("你好", "你好！有什么可以帮助你的吗？")
     p.AddReply("hello", "Hello! How can I help you?")
     return nil
@@ -129,7 +131,7 @@ func (p *AutoReplyPlugin) OnMessage(ctx context.Context, msg *ilink.Message) err
     text := msg.GetText()
     for keyword, reply := range p.replies {
         if strings.Contains(text, keyword) {
-            return sdk.SendText(ctx, msg.FromUserID, reply)
+            return p.sdk.SendText(ctx, msg.FromUserID, reply)
         }
     }
     return nil
@@ -148,10 +150,10 @@ loggerPlugin := NewLoggerPlugin(logger, "app")
 commandPlugin := NewCommandPlugin()
 
 // 注册插件
-if err := client.UsePlugin(context.Background(), loggerPlugin); err != nil {
+if err := client.UsePlugin(loggerPlugin); err != nil {
     log.Fatal(err)
 }
-if err := client.UsePlugin(context.Background(), commandPlugin); err != nil {
+if err := client.UsePlugin(commandPlugin); err != nil {
     log.Fatal(err)
 }
 ```

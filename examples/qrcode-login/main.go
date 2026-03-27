@@ -11,20 +11,25 @@ import (
 	"github.com/the-yex/wechat-ilink-sdk/login"
 )
 
-// QRCodeLoginExample demonstrates simple QR code login flow.
+// QRCodeLoginExample demonstrates QR code login with explicit token persistence helpers.
 // It shows how to:
 // 1. Create a client without token
 // 2. Display QR code for scanning
 // 3. Wait for user to scan and confirm
-// 4. Get login result with account info
+// 4. Save and reload the token with single-account helpers
 func main() {
 	// Setup logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	fmt.Println("=== WeChat iLink SDK - QR Code Login Example ===")
 
+	tokenStore, err := login.NewFileTokenStore("")
+	if err != nil {
+		logger.Error("failed to create token store", "error", err)
+		os.Exit(1)
+	}
+
 	// Step 1: Create client without token
-	// The client will be used for login, then can be used for sending messages
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 	)
@@ -60,7 +65,29 @@ func main() {
 	fmt.Printf("User ID:  %s\n", result.UserID)
 	fmt.Println("========================================")
 
+	token := &login.TokenInfo{
+		Token:   result.Token,
+		BaseURL: result.BaseURL,
+		UserID:  result.UserID,
+	}
+	if err := login.SaveDefaultToken(tokenStore, token); err != nil {
+		logger.Error("save token failed", "error", err)
+		os.Exit(1)
+	}
+
+	saved, err := login.LoadDefaultToken(tokenStore)
+	if err != nil {
+		logger.Error("load saved token failed", "error", err)
+		os.Exit(1)
+	}
+	if err := client.RestoreToken(saved); err != nil {
+		logger.Error("restore token failed", "error", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Token saved to ./.weixin/default.json and restored back into the client.")
+	fmt.Printf("Restored user: %s\n", client.CurrentUser().UserID)
+
 	fmt.Println("\n=== Example Complete ===")
-	fmt.Println("You can now use the client to send messages!")
-	fmt.Println("See examples/basic-bot for message handling examples.")
+	fmt.Println("See examples/basic-bot for automatic login and message handling.")
 }

@@ -330,17 +330,6 @@ func main() {
 	}
 	defer client.Close()
 
-	//// 注册插件到客户端（在 Run() 之前）
-	//if err := client.UsePlugin(context.Background(), loggerPlugin); err != nil {
-	//	logger.Error("注册日志插件失败", "error", err)
-	//}
-	//if err := client.UsePlugin(context.Background(), commandPlugin); err != nil {
-	//	logger.Error("注册命令插件失败", "error", err)
-	//}
-	//if err := client.UsePlugin(context.Background(), autoReplyPlugin); err != nil {
-	//	logger.Error("注册自动回复插件失败", "error", err)
-	//}
-
 	fmt.Println("\n已注册以下插件:")
 	fmt.Println("  - logger: 消息日志记录")
 	fmt.Println("  - command-processor: 命令处理 (/help, /ping, /echo)")

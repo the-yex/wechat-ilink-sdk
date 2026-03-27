@@ -7,10 +7,9 @@
 | 示例 | 难度 | 描述 |
 |------|------|------|
 | [simple-login](./simple-login) | 入门 | 最简单的扫码登录 |
-| [qrcode-login](./qrcode-login) | 入门 | 登录 + Token 存储 |
-| [qrcode-login-with-image](./qrcode-login-with-image) | 进阶 | 完整机器人 + 终端二维码 |
-| [auto-relogin](./auto-relogin) | 进阶 | 会话过期自动重登录 |
-| [basic-bot](./basic-bot) | 进阶 | Echo 机器人 + 中间件 |
+| [qrcode-login](./qrcode-login) | 入门 | 显式登录 + 单账号 Token 持久化 |
+| [basic-bot](./basic-bot) | 进阶 | 生产配置风格的 Echo 机器人 |
+| [auto-relogin](./auto-relogin) | 进阶 | 自定义会话过期回调与重登录 |
 | [sqlite-storage](./sqlite-storage) | 进阶 | SQLite 存储 Token |
 | [event-demo](./event-demo) | 进阶 | 事件系统使用示例 |
 | [plugins](./plugins) | 高级 | 插件开发示例 |
@@ -32,9 +31,9 @@ go run ./examples/simple-login/main.go
 - 等待用户扫码确认
 - 输出登录结果
 
-### 2. qrcode-login - 登录 + Token 存储
+### 2. qrcode-login - 登录 + 单账号 Token 持久化
 
-**适合：** 学习 Token 持久化
+**适合：** 学习显式保存和恢复 Token
 
 ```bash
 go run ./examples/qrcode-login/main.go
@@ -42,50 +41,38 @@ go run ./examples/qrcode-login/main.go
 
 **功能：**
 - 创建客户端和文件 Token 存储
-- 生成并显示二维码（URL 和内容）
-- 演示 Token 的保存和加载
+- 生成并显示二维码
+- 演示 `login.SaveDefaultToken` / `login.LoadDefaultToken`
+- 演示 `client.RestoreToken`
 
-### 3. qrcode-login-with-image - 完整机器人
+### 3. basic-bot - 生产配置风格的 Echo 机器人
 
-**适合：** 学习消息处理和自动回复
-
-```bash
-go run ./examples/qrcode-login-with-image/main.go
-```
-
-**功能：**
-- 终端显示二维码图片（可直接扫描）
-- 自动加载存储的 Token，跳过扫码
-- 监听消息并自动回复
-- 支持 Ctrl+C 优雅退出
-
-### 4. auto-relogin - 自动重登录
-
-**适合：** 生产环境长时间运行
-
-```bash
-go run ./examples/auto-relogin/main.go
-```
-
-**功能：**
-- 会话过期时自动触发重登录
-- 显示二维码提示用户重新扫码
-- 无缝恢复消息处理
-
-### 5. basic-bot - Echo 机器人
-
-**适合：** 学习中间件和事件系统
+**适合：** 学习推荐的自动登录、限流、重试和自定义 HTTP client 配置
 
 ```bash
 go run ./examples/basic-bot/main.go
 ```
 
 **功能：**
-- 使用中间件（日志、恢复）
-- 订阅事件
-- Echo 消息回复
+- 自动加载存储 Token，必要时自动扫码登录
+- 演示 `WithRetry`、`WithRateLimit`
+- 演示 API / 长轮询 / CDN 的独立 `http.Client`
+- 支持 Ctrl+C 优雅退出
 
-### 6. sqlite-storage - SQLite 存储
+### 4. auto-relogin - 自定义重登录回调
+
+**适合：** 需要在会话过期时接入自己的通知或重登录逻辑
+
+```bash
+go run ./examples/auto-relogin/main.go
+```
+
+**功能：**
+- 自定义 `WithOnSessionExpired`
+- 会话过期时重新展示二维码
+- 无缝恢复消息处理
+
+### 5. sqlite-storage - SQLite 存储
 
 **适合：** 学习自定义 TokenStore 实现
 
@@ -98,7 +85,7 @@ go run ./examples/sqlite-storage/main.go
 - SQLite 数据库持久化
 - 完整的消息处理示例
 
-### 7. event-demo - 事件系统
+### 6. event-demo - 事件系统
 
 **适合：** 学习事件订阅和生命周期管理
 
@@ -121,7 +108,7 @@ go run ./examples/event-demo/main.go
 | `EventTypeDisconnected` | 更新服务状态为"离线" |
 | `EventTypeError` | 统一错误处理、监控上报 |
 
-### 8. plugins - 插件开发
+### 7. plugins - 插件开发
 
 **适合：** 学习插件系统开发
 
@@ -136,7 +123,7 @@ go run ./examples/plugins/main.go
 
 详细文档：[plugins/README.md](./plugins/README.md)
 
-### 9. ai-assistant - AI 助手
+### 8. ai-assistant - AI 助手
 
 **适合：** 集成 AI 服务
 

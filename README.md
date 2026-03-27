@@ -495,11 +495,10 @@ See the [examples](./examples/) directory:
 | Example | Description |
 |---------|-------------|
 | `simple-login` | Basic QR code login |
-| `qrcode-login` | Login with token storage |
-| `qrcode-login-with-image` | Full bot with auto-reply |
-| `auto-relogin` | Auto re-login on session expiry |
-| `sqlite-storage` | SQLite storage for user info |
-| `basic-bot` | Echo bot with middleware |
+| `qrcode-login` | Explicit login plus single-account token persistence helpers |
+| `basic-bot` | Production-style echo bot with retry, rate limit, and custom HTTP clients |
+| `auto-relogin` | Custom session-expired callback and re-login flow |
+| `sqlite-storage` | SQLite-backed TokenStore example |
 | `event-demo` | Event system usage example |
 | `plugins` | Plugin development examples |
 | `ai-assistant` | AI assistant integration pattern |

@@ -24,16 +24,28 @@ func main() {
 	fmt.Println("=== WeChat iLink SDK - Auto Re-login Demo ===")
 
 	// Create token store for persistence
-	tokenStore, _ := login.NewFileTokenStore("")
+	tokenStore, err := login.NewFileTokenStore("")
+	if err != nil {
+		logger.Error("create token store", "error", err)
+		os.Exit(1)
+	}
 
-	// Create client - SDK handles login and re-login automatically by default
-	client, _ := ilinksdk.NewClient(
+	var client *ilinksdk.Client
+	client, err = ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
-		// That's it! SDK will:
-		// 1. Show QR code in terminal when login needed (default OnLogin)
-		// 2. Auto re-login when session expires (default OnSessionExpired)
+		ilinksdk.WithOnSessionExpired(func(ctx context.Context) (*ilink.LoginResult, error) {
+			logger.Warn("session expired, asking user to scan again")
+			return client.Login(ctx, func(ctx context.Context, qr *login.QRCode) error {
+				login.PrintQRCodeWithTerm(qr)
+				return nil
+			})
+		}),
 	)
+	if err != nil {
+		logger.Error("create client", "error", err)
+		os.Exit(1)
+	}
 	defer client.Close()
 
 	fmt.Println("Starting bot...")
@@ -53,18 +65,13 @@ func main() {
 		cancel()
 	}()
 
-	// Run handles everything automatically
-	if err := client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
-		logger.Info("received message", "from", msg.FromUserID)
-		if text := msg.GetText(); text != "" {
-			logger.Info("message content", "text", text)
-			reply := fmt.Sprintf("[Auto-reply] Received: %s", text)
-			if err := client.SendText(ctx, msg.FromUserID, reply); err != nil {
-				logger.Error("failed to send reply", "error", err)
-			}
-		}
-		return nil
-	}); err != nil && err != context.Canceled {
+	client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+		logger.Info("received text message", "from", msg.FromUserID, "text", text)
+		return client.SendText(ctx, msg.FromUserID, fmt.Sprintf("[Auto-reply] Received: %s", text))
+	})
+
+	// Run handles login, token recovery, and our custom session-expired callback.
+	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {
 		logger.Error("bot error", "error", err)
 	}
 

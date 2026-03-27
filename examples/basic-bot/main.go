@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/the-yex/wechat-ilink-sdk"
 	"github.com/the-yex/wechat-ilink-sdk/ilink"
@@ -26,16 +28,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create client with token store
-	// SDK will automatically load stored token if available
-	// SDK also handles login and re-login automatically (default behavior)
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+	}
+
+	// Create client with token store and production-ready defaults.
+	// SDK will automatically load stored token if available and perform QR login when needed.
 	client, err := ilinksdk.NewClient(
 		ilinksdk.WithLogger(logger),
 		ilinksdk.WithTokenStore(tokenStore),
+		ilinksdk.WithHTTPClient(&http.Client{
+			Timeout:   15 * time.Second,
+			Transport: transport,
+		}),
+		ilinksdk.WithLongPollHTTPClient(&http.Client{
+			Timeout:   40 * time.Second,
+			Transport: transport,
+		}),
+		ilinksdk.WithCDNHTTPClient(&http.Client{
+			Transport: transport,
+		}),
+		ilinksdk.WithRetry(3, time.Second, 5*time.Second),
+		ilinksdk.WithRateLimit(5, 1),
 		ilinksdk.WithMiddleware(
 			middleware.Logging(logger),
 			middleware.Recovery(logger),
-			middleware.Retry(middleware.DefaultRetryConfig()),
 		),
 	)
 	if err != nil {
@@ -44,21 +61,14 @@ func main() {
 	}
 	defer client.Close()
 
-	// Explicit login (optional - Run() will auto-login if needed)
-	// Here we call Login() to show the login result before Run()
-	result, err := client.Login(context.Background(), func(ctx context.Context, qr *login.QRCode) error {
-		login.PrintQRCodeWithTerm(qr)
-		return nil
-	})
-	if err != nil {
-		logger.Error("login failed", "error", err)
-		os.Exit(1)
-	}
+	client.OnText(func(ctx context.Context, msg *ilink.Message, text string) error {
+		logger.Info("received text message",
+			"from", msg.FromUserID,
+			"text", text,
+		)
 
-	logger.Info("login successful",
-		"account_id", result.AccountID,
-		"user_id", result.UserID,
-	)
+		return client.SendText(ctx, msg.FromUserID, "You said: "+text)
+	})
 
 	// Setup signal handling
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,19 +82,9 @@ func main() {
 		cancel()
 	}()
 
-	// Run message loop
+	// Run message loop with registered handlers.
 	logger.Info("starting bot...")
-	if err := client.Run(ctx, func(ctx context.Context, msg *ilink.Message) error {
-		text := msg.GetText()
-		logger.Info("received message",
-			"from", msg.FromUserID,
-			"text", text,
-		)
-
-		// Simple echo response
-		reply := "You said: " + text
-		return client.SendText(ctx, msg.FromUserID, reply)
-	}); err != nil && err != context.Canceled {
+	if err := client.Run(ctx, nil); err != nil && err != context.Canceled {
 		logger.Error("run error", "error", err)
 		os.Exit(1)
 	}
