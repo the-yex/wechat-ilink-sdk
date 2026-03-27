@@ -499,7 +499,9 @@ See the [examples](./examples/) directory:
 | `basic-bot` | Production-style echo bot with retry, rate limit, and custom HTTP clients |
 | `auto-relogin` | Custom session-expired callback and re-login flow |
 | `sqlite-storage` | SQLite-backed TokenStore example |
+| `token-provider` | External credential repository integration pattern |
 | `event-demo` | Event system usage example |
+| `error-handling` | Structured error classification and recovery patterns |
 | `plugins` | Plugin development examples |
 | `ai-assistant` | AI assistant integration pattern |
 

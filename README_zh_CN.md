@@ -498,7 +498,9 @@ Bot:  正在退出，请重新扫码登录...
 | `basic-bot` | 带重试、限流、自定义 HTTP client 的生产风格 Echo 机器人 |
 | `auto-relogin` | 自定义会话过期回调与重登录流程 |
 | `sqlite-storage` | 基于 SQLite 的 TokenStore 示例 |
+| `token-provider` | 外部凭据仓库 / 数据库接入模式 |
 | `event-demo` | 事件系统使用示例 |
+| `error-handling` | 结构化错误分类与恢复策略 |
 | `plugins` | 插件开发示例 |
 | `ai-assistant` | AI 助手集成模式 |
 

@@ -11,7 +11,9 @@
 | [basic-bot](./basic-bot) | 进阶 | 生产配置风格的 Echo 机器人 |
 | [auto-relogin](./auto-relogin) | 进阶 | 自定义会话过期回调与重登录 |
 | [sqlite-storage](./sqlite-storage) | 进阶 | SQLite 存储 Token |
+| [token-provider](./token-provider) | 进阶 | 外部凭据仓库 / 数据库接入模式 |
 | [event-demo](./event-demo) | 进阶 | 事件系统使用示例 |
+| [error-handling](./error-handling) | 进阶 | 结构化错误分类与处理策略 |
 | [plugins](./plugins) | 高级 | 插件开发示例 |
 | [ai-assistant](./ai-assistant) | 高级 | AI 助手集成模式 |
 
@@ -85,7 +87,21 @@ go run ./examples/sqlite-storage/main.go
 - SQLite 数据库持久化
 - 完整的消息处理示例
 
-### 6. event-demo - 事件系统
+### 6. token-provider - 外部凭据仓库接入
+
+**适合：** Token 保存在数据库、Redis、密钥管理系统，而不是本地文件
+
+```bash
+go run ./examples/token-provider/main.go
+```
+
+**功能：**
+- 演示 `WithTokenProvider`
+- 演示 `WithOnLoginSuccess`
+- 演示 `WithOnTokenInvalid`
+- 用内存仓库模拟数据库 / 远程凭据服务
+
+### 7. event-demo - 事件系统
 
 **适合：** 学习事件订阅和生命周期管理
 
@@ -108,7 +124,21 @@ go run ./examples/event-demo/main.go
 | `EventTypeDisconnected` | 更新服务状态为"离线" |
 | `EventTypeError` | 统一错误处理、监控上报 |
 
-### 7. plugins - 插件开发
+### 8. error-handling - 结构化错误处理
+
+**适合：** 想知道不同错误该重试、告警还是等待用户重新触发
+
+```bash
+go run ./examples/error-handling/main.go
+```
+
+**功能：**
+- 演示 `ErrContextTokenRequired`
+- 演示 `IsAuthenticationError`
+- 演示 `IsTemporaryError`
+- 演示 `ErrorCode`
+
+### 9. plugins - 插件开发
 
 **适合：** 学习插件系统开发
 
@@ -123,7 +153,7 @@ go run ./examples/plugins/main.go
 
 详细文档：[plugins/README.md](./plugins/README.md)
 
-### 8. ai-assistant - AI 助手
+### 10. ai-assistant - AI 助手
 
 **适合：** 集成 AI 服务
 
